@@ -60,6 +60,24 @@
 
 ## 右侧对话分析区
 
+### 输入方式
+
+两种方式添加对话记录：
+
+1. **手动输入**：在底部输入框粘贴/输入对方消息
+2. **截图识别**：上传或粘贴聊天截图，AI 自动提取对话记录
+
+### 截图识别流程
+
+1. 用户点击"📸 上传截图"按钮，或直接 Ctrl+V 粘贴截图
+2. 支持：单张/多张截图、微信/其他聊天软件截图
+3. 前端将图片发送到 `/api/extract-from-screenshot`
+4. AI 识别截图中的对话，提取出每条消息（区分发送方）
+5. 返回提取结果供用户**确认/编辑**：
+   - 以列表展示提取的消息（可逐条删除、修改文字）
+   - 用户确认后，消息批量保存到 Workspace
+6. 提取的消息显示在对话区，用户可选择任意一条进行分析
+
 ### 对话流
 
 每轮对话包含：
@@ -192,9 +210,38 @@
 
 **响应体**：同 `/api/analyze` 的 `replies` 数组（3 条新建议，与之前不同）。
 
+### POST /api/extract-from-screenshot
+
+从聊天截图中提取对话记录。
+
+**请求体**：
+
+```json
+{
+  "images": ["base64_encoded_image_1", "base64_encoded_image_2"],
+  "apiConfig": { "baseUrl": "...", "apiKey": "...", "model": "..." }
+}
+```
+
+**响应体**：
+
+```json
+{
+  "messages": [
+    { "sender": "other", "content": "在干嘛呀", "time": "14:30" },
+    { "sender": "me", "content": "刚忙完", "time": "14:31" },
+    { "sender": "other", "content": "周末有空吗", "time": "14:32" }
+  ]
+}
+```
+
+- `sender`：`"other"` 对方 / `"me"` 我
+- `time`：截图中可见的时间（可选，可能为 null）
+- 多张截图按顺序合并，自动去重
+
 ## Prompt 设计
 
-System prompt 核心内容（中文）：
+### 聊天分析 Prompt
 
 ```
 你是一个高情商聊天助手。根据用户提供的上下文信息分析聊天记录。
@@ -217,6 +264,26 @@ System prompt 核心内容（中文）：
 - 直接给可用的回复，不要模板
 ```
 
+### 截图提取 Prompt
+
+```
+请识别这张聊天截图中的对话记录。按时间顺序提取每条消息。
+
+识别规则：
+- 区分发送方：右侧气泡为"me"（我），左侧气泡为"other"（对方）
+- 提取消息文字内容
+- 如果能看到时间，提取时间
+- 如果有多条消息，按从上到下顺序排列
+- 支持微信、QQ、iMessage 等常见聊天软件的截图格式
+
+输出 JSON 格式：
+{
+  "messages": [
+    { "sender": "other"|"me", "content": "消息内容", "time": "HH:MM" }
+  ]
+}
+```
+
 ## 文件结构
 
 ```
@@ -227,8 +294,10 @@ liaotianzhushou/
 │   ├── api/
 │   │   ├── analyze/
 │   │   │   └── route.ts          # 分析 API
-│   │   └── regenerate-replies/
-│   │       └── route.ts          # 换一批回复 API
+│   │   ├── regenerate-replies/
+│   │   │   └── route.ts          # 换一批回复 API
+│   │   └── extract-from-screenshot/
+│   │       └── route.ts          # 截图提取 API
 │   └── globals.css
 ├── components/
 │   ├── WorkspacePanel.tsx        # 左侧面板（Workspace 列表 + 设置）
@@ -236,7 +305,9 @@ liaotianzhushou/
 │   ├── ChatArea.tsx              # 右侧对话区域
 │   ├── MessageBubble.tsx         # 消息气泡
 │   ├── AnalysisCard.tsx          # 分析结果卡片
-│   └── ReplySuggestions.tsx      # 回复建议（含换一批按钮）
+│   ├── ReplySuggestions.tsx      # 回复建议（含换一批按钮）
+│   ├── ScreenshotUploader.tsx    # 截图上传/粘贴组件
+│   └── ExtractedMessages.tsx     # 截图提取结果确认/编辑
 ├── lib/
 │   ├── prompt.ts                 # Prompt 模板
 │   ├── types.ts                  # TypeScript 类型
@@ -268,9 +339,11 @@ interface Workspace {
 
 interface Message {
   id: string;
-  type: "incoming";               // 对方发来的消息
+  sender: "other" | "me";        // 消息发送方
   content: string;
-  analysis: Analysis | null;      // AI 分析结果
+  time?: string;                  // 截图中提取的时间（可选）
+  source: "manual" | "screenshot"; // 来源：手动输入 / 截图提取
+  analysis: Analysis | null;      // AI 分析结果（仅 other 消息有）
   selectedReplyIndex: number | null; // 用户选择的回复索引
 }
 ```
