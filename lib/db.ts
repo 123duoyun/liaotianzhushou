@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import initSqlJs, { type Database } from "sql.js";
 import path from "path";
 import fs from "fs";
 import type { Analysis, ApiConfig, AppData, Message, Workspace } from "./types";
@@ -6,131 +6,168 @@ import type { Analysis, ApiConfig, AppData, Message, Workspace } from "./types";
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "chat.db");
 
-let _db: Database.Database | null = null;
+let _db: Database | null = null;
+let _initPromise: Promise<Database> | null = null;
 
-function getDb(): Database.Database {
-  if (_db) return _db;
-
+function saveToDisk() {
+  if (!_db) return;
   fs.mkdirSync(DATA_DIR, { recursive: true });
-
-  _db = new Database(DB_PATH);
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("foreign_keys = ON");
-
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS workspaces (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      gender TEXT NOT NULL DEFAULT 'male',
-      relationship TEXT NOT NULL DEFAULT '',
-      goal TEXT NOT NULL DEFAULT ''
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-      sender TEXT NOT NULL,
-      content TEXT NOT NULL,
-      time TEXT,
-      source TEXT NOT NULL DEFAULT 'manual',
-      analysis TEXT,
-      selected_reply_index INTEGER
-    );
-
-    CREATE TABLE IF NOT EXISTS app_config (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-  `);
-
-  return _db;
+  const data = _db.export();
+  fs.writeFileSync(DB_PATH, Buffer.from(data));
 }
+
+async function getDb(): Promise<Database> {
+  if (_db) return _db;
+  if (_initPromise) return _initPromise;
+
+  _initPromise = (async () => {
+    const SQL = await initSqlJs();
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+
+    if (fs.existsSync(DB_PATH)) {
+      const buf = fs.readFileSync(DB_PATH);
+      _db = new SQL.Database(buf);
+    } else {
+      _db = new SQL.Database();
+    }
+
+    _db.run("PRAGMA foreign_keys = ON");
+    _db.run(`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        gender TEXT NOT NULL DEFAULT 'male',
+        relationship TEXT NOT NULL DEFAULT '',
+        goal TEXT NOT NULL DEFAULT ''
+      )
+    `);
+    _db.run(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        sender TEXT NOT NULL,
+        content TEXT NOT NULL,
+        time TEXT,
+        source TEXT NOT NULL DEFAULT 'manual',
+        analysis TEXT,
+        selected_reply_index INTEGER
+      )
+    `);
+    _db.run(`
+      CREATE TABLE IF NOT EXISTS app_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `);
+    saveToDisk();
+    return _db;
+  })();
+
+  return _initPromise;
+}
+
+// ---- Helpers ----
 
 // ---- Workspaces ----
 
-export function getWorkspaces(): Workspace[] {
-  const db = getDb();
-  const rows = db.prepare("SELECT * FROM workspaces").all() as Array<{
-    id: string; name: string; gender: string; relationship: string; goal: string;
-  }>;
-  return rows.map((row) => ({
-    ...row,
-    gender: row.gender as Workspace["gender"],
-    messages: getMessages(row.id),
-  }));
+export async function getWorkspaces(): Promise<Workspace[]> {
+  const db = await getDb();
+  const stmt = db.prepare("SELECT * FROM workspaces");
+  const workspaces: Workspace[] = [];
+  while (stmt.step()) {
+    const row = stmt.getAsObject() as { id: string; name: string; gender: string; relationship: string; goal: string };
+    workspaces.push({
+      id: row.id,
+      name: row.name,
+      gender: row.gender as Workspace["gender"],
+      relationship: row.relationship,
+      goal: row.goal,
+      messages: await getMessages(row.id),
+    });
+  }
+  stmt.free();
+  return workspaces;
 }
 
-export function upsertWorkspace(ws: Workspace): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO workspaces (id, name, gender, relationship, goal)
-    VALUES (@id, @name, @gender, @relationship, @goal)
-    ON CONFLICT(id) DO UPDATE SET
-      name=@name, gender=@gender, relationship=@relationship, goal=@goal
-  `).run(ws);
+export async function upsertWorkspace(ws: Workspace): Promise<void> {
+  const db = await getDb();
+  db.run(
+    `INSERT INTO workspaces (id, name, gender, relationship, goal)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name=excluded.name, gender=excluded.gender, relationship=excluded.relationship, goal=excluded.goal`,
+    [ws.id, ws.name, ws.gender, ws.relationship, ws.goal]
+  );
+  saveToDisk();
 }
 
-export function deleteWorkspace(id: string): void {
-  const db = getDb();
-  db.prepare("DELETE FROM workspaces WHERE id = ?").run(id);
+export async function deleteWorkspace(id: string): Promise<void> {
+  const db = await getDb();
+  db.run("DELETE FROM workspaces WHERE id = ?", [id]);
+  saveToDisk();
 }
 
 // ---- Messages ----
 
-export function getMessages(workspaceId: string): Message[] {
-  const db = getDb();
-  const rows = db.prepare(
-    "SELECT * FROM messages WHERE workspace_id = ? ORDER BY rowid"
-  ).all(workspaceId) as Array<{
-    id: string; workspace_id: string; sender: string; content: string;
-    time: string | null; source: string; analysis: string | null; selected_reply_index: number | null;
-  }>;
+export async function getMessages(workspaceId: string): Promise<Message[]> {
+  const db = await getDb();
+  const stmt = db.prepare("SELECT * FROM messages WHERE workspace_id = ? ORDER BY rowid");
+  stmt.bind([workspaceId]);
 
-  return rows.map((row) => ({
-    id: row.id,
-    sender: row.sender as Message["sender"],
-    content: row.content,
-    time: row.time,
-    source: row.source as Message["source"],
-    analysis: row.analysis ? (JSON.parse(row.analysis) as Analysis) : null,
-    selectedReplyIndex: row.selected_reply_index,
-  }));
+  const messages: Message[] = [];
+  while (stmt.step()) {
+    const row = stmt.getAsObject() as {
+      id: string; workspace_id: string; sender: string; content: string;
+      time: string | null; source: string; analysis: string | null; selected_reply_index: number | null;
+    };
+    messages.push({
+      id: row.id,
+      sender: row.sender as Message["sender"],
+      content: row.content,
+      time: row.time,
+      source: row.source as Message["source"],
+      analysis: row.analysis ? (JSON.parse(row.analysis) as Analysis) : null,
+      selectedReplyIndex: row.selected_reply_index,
+    });
+  }
+  stmt.free();
+  return messages;
 }
 
-export function upsertMessage(workspaceId: string, msg: Message): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO messages (id, workspace_id, sender, content, time, source, analysis, selected_reply_index)
-    VALUES (@id, @workspaceId, @sender, @content, @time, @source, @analysis, @selectedReplyIndex)
-    ON CONFLICT(id) DO UPDATE SET
-      sender=@sender, content=@content, time=@time, source=@source,
-      analysis=@analysis, selected_reply_index=@selectedReplyIndex
-  `).run({
-    id: msg.id,
-    workspaceId,
-    sender: msg.sender,
-    content: msg.content,
-    time: msg.time ?? null,
-    source: msg.source,
-    analysis: msg.analysis ? JSON.stringify(msg.analysis) : null,
-    selectedReplyIndex: msg.selectedReplyIndex ?? null,
-  });
+export async function upsertMessage(workspaceId: string, msg: Message): Promise<void> {
+  const db = await getDb();
+  db.run(
+    `INSERT INTO messages (id, workspace_id, sender, content, time, source, analysis, selected_reply_index)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       sender=excluded.sender, content=excluded.content, time=excluded.time, source=excluded.source,
+       analysis=excluded.analysis, selected_reply_index=excluded.selected_reply_index`,
+    [
+      msg.id, workspaceId, msg.sender, msg.content, msg.time ?? null, msg.source,
+      msg.analysis ? JSON.stringify(msg.analysis) : null, msg.selectedReplyIndex ?? null,
+    ]
+  );
+  saveToDisk();
 }
 
-export function deleteMessage(id: string): void {
-  const db = getDb();
-  db.prepare("DELETE FROM messages WHERE id = ?").run(id);
+export async function deleteMessage(id: string): Promise<void> {
+  const db = await getDb();
+  db.run("DELETE FROM messages WHERE id = ?", [id]);
+  saveToDisk();
 }
 
 // ---- App Config ----
 
-export function getConfig(): ApiConfig & { activeWorkspaceId: string } {
-  const db = getDb();
-  const rows = db.prepare("SELECT key, value FROM app_config").all() as Array<{
-    key: string; value: string;
-  }>;
+export async function getConfig(): Promise<ApiConfig & { activeWorkspaceId: string }> {
+  const db = await getDb();
+  const stmt = db.prepare("SELECT key, value FROM app_config");
+  const map: Record<string, string> = {};
+  while (stmt.step()) {
+    const row = stmt.getAsObject() as { key: string; value: string };
+    map[row.key] = row.value;
+  }
+  stmt.free();
 
-  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
     baseUrl: map.baseUrl || process.env.NEXT_PUBLIC_OPENAI_BASE_URL || "https://api.openai.com/v1",
     apiKey: map.apiKey || process.env.NEXT_PUBLIC_OPENAI_API_KEY || "",
@@ -139,19 +176,20 @@ export function getConfig(): ApiConfig & { activeWorkspaceId: string } {
   };
 }
 
-export function setConfig(key: string, value: string): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO app_config (key, value) VALUES (@key, @value)
-    ON CONFLICT(key) DO UPDATE SET value=@value
-  `).run({ key, value });
+export async function setConfig(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  db.run(
+    "INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    [key, value]
+  );
+  saveToDisk();
 }
 
 // ---- Full Data (for /api/data) ----
 
-export function loadFullData(): AppData {
-  const workspaces = getWorkspaces();
-  const config = getConfig();
+export async function loadFullData(): Promise<AppData> {
+  const workspaces = await getWorkspaces();
+  const config = await getConfig();
 
   const activeWorkspaceId = workspaces.some((w) => w.id === config.activeWorkspaceId)
     ? config.activeWorkspaceId
@@ -175,27 +213,23 @@ export function loadFullData(): AppData {
   };
 }
 
-export function saveFullData(data: AppData): void {
-  const db = getDb();
+export async function saveFullData(data: AppData): Promise<void> {
+  const db = await getDb();
 
-  const txn = db.transaction(() => {
-    // Clear and re-insert everything (simple, mirrors old localStorage pattern)
-    db.exec("DELETE FROM messages");
-    db.exec("DELETE FROM workspaces");
-    db.exec("DELETE FROM app_config");
+  db.run("DELETE FROM messages");
+  db.run("DELETE FROM workspaces");
+  db.run("DELETE FROM app_config");
 
-    for (const ws of data.workspaces) {
-      upsertWorkspace(ws);
-      for (const msg of ws.messages) {
-        upsertMessage(ws.id, msg);
-      }
+  for (const ws of data.workspaces) {
+    await upsertWorkspace(ws);
+    for (const msg of ws.messages) {
+      await upsertMessage(ws.id, msg);
     }
+  }
 
-    setConfig("activeWorkspaceId", data.activeWorkspaceId);
-    setConfig("baseUrl", data.apiConfig.baseUrl);
-    setConfig("apiKey", data.apiConfig.apiKey);
-    setConfig("model", data.apiConfig.model);
-  });
-
-  txn();
+  await setConfig("activeWorkspaceId", data.activeWorkspaceId);
+  await setConfig("baseUrl", data.apiConfig.baseUrl);
+  await setConfig("apiKey", data.apiConfig.apiKey);
+  await setConfig("model", data.apiConfig.model);
+  saveToDisk();
 }

@@ -5,7 +5,7 @@ import type { Workspace } from "../../../lib/types";
 export async function POST(request: Request) {
   try {
     const ws = (await request.json()) as Workspace;
-    upsertWorkspace(ws);
+    await upsertWorkspace(ws);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Failed to create workspace:", error);
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const ws = (await request.json()) as Workspace;
-    upsertWorkspace(ws);
+    await upsertWorkspace(ws);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Failed to update workspace:", error);
@@ -31,7 +31,7 @@ export async function DELETE(request: Request) {
     if (!id) {
       return NextResponse.json({ error: "Missing workspace id" }, { status: 400 });
     }
-    deleteWorkspace(id);
+    await deleteWorkspace(id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Failed to delete workspace:", error);

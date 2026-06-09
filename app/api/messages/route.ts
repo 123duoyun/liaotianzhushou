@@ -8,7 +8,7 @@ export async function POST(request: Request) {
       workspaceId: string;
       message: Message;
     };
-    upsertMessage(workspaceId, message);
+    await upsertMessage(workspaceId, message);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Failed to create message:", error);
@@ -22,7 +22,7 @@ export async function PUT(request: Request) {
       workspaceId: string;
       message: Message;
     };
-    upsertMessage(workspaceId, message);
+    await upsertMessage(workspaceId, message);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Failed to update message:", error);
@@ -37,7 +37,7 @@ export async function DELETE(request: Request) {
     if (!id) {
       return NextResponse.json({ error: "Missing message id" }, { status: 400 });
     }
-    deleteMessage(id);
+    await deleteMessage(id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Failed to delete message:", error);
