@@ -1,7 +1,12 @@
 import initSqlJs, { type Database } from "sql.js";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import type { Analysis, ApiConfig, AppData, Message, Workspace } from "./types";
+
+// 获取当前模块目录（兼容 ESM）
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "chat.db");
@@ -21,7 +26,17 @@ async function getDb(): Promise<Database> {
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    const SQL = await initSqlJs();
+    const SQL = await initSqlJs({
+      locateFile: (file) => {
+        // 在 Node.js 环境中，直接指向 sql.js 的 dist 目录
+        const sqlJsPath = path.resolve(process.cwd(), "node_modules", "sql.js", "dist", file);
+        if (fs.existsSync(sqlJsPath)) {
+          return sqlJsPath;
+        }
+        // 备用方案：使用 URL 方式加载
+        return `https://sql.js.org/dist/${file}`;
+      },
+    });
     fs.mkdirSync(DATA_DIR, { recursive: true });
 
     if (fs.existsSync(DB_PATH)) {
