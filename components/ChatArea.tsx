@@ -206,7 +206,7 @@ export default function ChatArea({
   }
 
   return (
-    <main className="flex min-h-[52vh] flex-1 flex-col bg-paper md:min-h-screen">
+    <main className="flex min-h-0 flex-1 flex-col bg-paper">
       <div className="flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
         {draftExtractedMessages.length > 0 ? (
           <ExtractedMessages

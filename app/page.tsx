@@ -206,7 +206,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-paper text-ink md:flex">
+    <div className="h-screen overflow-hidden bg-paper text-ink md:flex">
       <h1 className="sr-only">高情商聊天助手</h1>
       <WorkspacePanel data={data} onChange={setData} />
       <ChatArea
