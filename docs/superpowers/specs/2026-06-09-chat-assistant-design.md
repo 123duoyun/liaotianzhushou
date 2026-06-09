@@ -23,15 +23,27 @@
 
 ## 左侧 Workspace 面板
 
-### 用户信息选择
+### Workspace 管理
 
-三个选择器，首次打开时必选：
+支持多个 Workspace，每个 Workspace 对应一个聊天对象：
 
-1. **我的性别**：男 / 女
-2. **与对方关系**：朋友 / 暧昧 / 情侣 / 同事 / 相亲对象 / 其他
-3. **期望效果**：拉近距离 / 化解矛盾 / 保持吸引力 / 正常聊天
+- **Workspace 列表**：显示所有已创建的 Workspace（显示对方昵称/备注）
+- **切换 Workspace**：点击切换，右侧加载对应的对话历史
+- **新建 Workspace**：点击 "+" 创建新的
+- **编辑/删除**：长按或右键菜单
 
-### API 设置
+首次打开自动创建一个默认 Workspace。
+
+### 用户信息选择（每个 Workspace 独立）
+
+每个 Workspace 有自己的设置：
+
+1. **对方备注名**：方便区分不同聊天对象
+2. **我的性别**：男 / 女
+3. **与对方关系**：朋友 / 暧昧 / 情侣 / 同事 / 相亲对象 / 其他
+4. **期望效果**：拉近距离 / 化解矛盾 / 保持吸引力 / 正常聊天
+
+### API 设置（全局共享）
 
 可折叠区域：
 
@@ -39,7 +51,12 @@
 - **API Key**：默认读取环境变量 `OPENAI_API_KEY`，可手动填写覆盖
 - **模型名称**：默认读取环境变量 `OPENAI_MODEL`，可手动修改
 
-状态持久化：用户信息和 API 设置保存在 localStorage，下次打开自动恢复。
+### 状态持久化
+
+所有数据保存在 localStorage：
+- Workspace 列表及各 Workspace 的用户信息设置
+- 每个 Workspace 的完整对话历史（消息 + 分析结果 + 回复选择）
+- API 设置（全局）
 
 ## 右侧对话分析区
 
@@ -60,16 +77,25 @@
 - **回复建议**：温暖真诚型 🟢 / 幽默轻松型 🟡 / 高段位型 🔴，每个给可直接发送的文字 + 策略意图
 - **进阶建议**：话题引导、破冰建议（可选，AI 自行判断是否需要）
 
+### 回复建议操作
+
+- **选择回复**：点击一条建议，记录为你的选择，作为上下文传给下一轮
+- **换一批**：点击"换一批"按钮，AI 基于同样的分析生成 3 条新的回复建议（保持原有意图分析不变）
+- 选择回复后，已选回复高亮显示，其他建议淡化
+
 ### 连续对话机制
 
 - 用户点选一条回复建议 → 记录选择，作为上下文传给下一轮分析
 - 历史分析默认折叠，点击展开
 - 底部输入框持续粘贴新消息
 - 每轮分析带氛围趋势标识
+- 切换 Workspace 时自动加载对应对话历史
 
 ## API 设计
 
 ### POST /api/analyze
+
+分析新消息，返回意图分析 + 回复建议。
 
 **请求体**：
 
@@ -147,6 +173,25 @@
 }
 ```
 
+### POST /api/regenerate-replies
+
+对同一条消息重新生成回复建议（意图分析不变）。
+
+**请求体**：
+
+```json
+{
+  "workspace": { "gender": "male", "relationship": "暧昧", "goal": "拉近距离" },
+  "message": "周末有空吗，想去看那个展",
+  "existingAnalysis": { "intent": {...}, "risks": {...} },
+  "previousReplies": ["好呀...", "你是想看展...", "可以啊..."],
+  "history": [...],
+  "apiConfig": { "baseUrl": "...", "apiKey": "...", "model": "..." }
+}
+```
+
+**响应体**：同 `/api/analyze` 的 `replies` 数组（3 条新建议，与之前不同）。
+
 ## Prompt 设计
 
 System prompt 核心内容（中文）：
@@ -177,30 +222,62 @@ System prompt 核心内容（中文）：
 ```
 liaotianzhushou/
 ├── app/
-│   ├── layout.tsx          # 根布局
-│   ├── page.tsx            # 主页面
+│   ├── layout.tsx                # 根布局
+│   ├── page.tsx                  # 主页面
 │   ├── api/
-│   │   └── analyze/
-│   │       └── route.ts    # 分析 API
+│   │   ├── analyze/
+│   │   │   └── route.ts          # 分析 API
+│   │   └── regenerate-replies/
+│   │       └── route.ts          # 换一批回复 API
 │   └── globals.css
 ├── components/
-│   ├── WorkspacePanel.tsx  # 左侧设置面板
-│   ├── ChatArea.tsx        # 右侧对话区域
-│   ├── MessageBubble.tsx   # 消息气泡
-│   ├── AnalysisCard.tsx    # 分析结果卡片
-│   └── ReplySuggestions.tsx # 回复建议
+│   ├── WorkspacePanel.tsx        # 左侧面板（Workspace 列表 + 设置）
+│   ├── WorkspaceSwitcher.tsx     # Workspace 切换/新建
+│   ├── ChatArea.tsx              # 右侧对话区域
+│   ├── MessageBubble.tsx         # 消息气泡
+│   ├── AnalysisCard.tsx          # 分析结果卡片
+│   └── ReplySuggestions.tsx      # 回复建议（含换一批按钮）
 ├── lib/
-│   ├── prompt.ts           # Prompt 模板
-│   └── types.ts            # TypeScript 类型
-├── .env.local              # 环境变量（不提交）
+│   ├── prompt.ts                 # Prompt 模板
+│   ├── types.ts                  # TypeScript 类型
+│   └── storage.ts                # localStorage 读写工具
+├── .env.local                    # 环境变量（不提交）
 └── docs/
 ```
 
 ## 数据存储
 
-- **Workspace 设置**：localStorage
-- **对话历史**：当前页面 state（不持久化，刷新清空）
-- **API Key**：优先环境变量，可被用户输入覆盖
+所有数据持久化到 localStorage，刷新不丢失：
+
+```typescript
+// localStorage key: "chat-assistant-data"
+interface AppData {
+  workspaces: Workspace[];        // 所有 Workspace
+  activeWorkspaceId: string;      // 当前选中的 Workspace
+  apiConfig: ApiConfig;           // 全局 API 设置
+}
+
+interface Workspace {
+  id: string;
+  name: string;                   // 对方备注名
+  gender: "male" | "female";
+  relationship: string;
+  goal: string;
+  messages: Message[];            // 完整对话历史
+}
+
+interface Message {
+  id: string;
+  type: "incoming";               // 对方发来的消息
+  content: string;
+  analysis: Analysis | null;      // AI 分析结果
+  selectedReplyIndex: number | null; // 用户选择的回复索引
+}
+```
+
+- **Workspace 列表及设置**：localStorage
+- **对话历史（含分析结果和回复选择）**：localStorage，每个 Workspace 独立存储
+- **API Key**：优先环境变量，可被用户输入覆盖，也存入 localStorage
 
 ## 错误处理
 
