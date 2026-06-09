@@ -48,7 +48,7 @@ export default function WorkspacePanel({ data, onChange }: { data: AppData; onCh
   }
 
   return (
-    <aside className="flex h-full w-full flex-col gap-6 border-r border-mist bg-white p-4 md:w-[280px]">
+    <aside className="flex max-h-[48vh] w-full flex-col gap-6 overflow-y-auto border-b border-mist bg-white p-4 md:h-screen md:max-h-none md:w-[280px] md:border-b-0 md:border-r">
       <WorkspaceSwitcher
         workspaces={data.workspaces}
         activeWorkspaceId={data.activeWorkspaceId}

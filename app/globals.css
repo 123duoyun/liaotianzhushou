@@ -10,6 +10,11 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   background: #f7f5ef;
@@ -21,4 +26,8 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+button {
+  touch-action: manipulation;
 }

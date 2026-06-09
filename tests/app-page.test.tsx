@@ -51,4 +51,12 @@ describe("Home app integration", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/analyze", expect.objectContaining({ method: "POST" })));
     expect(await screen.findByText("想见面")).toBeInTheDocument();
   });
+
+  it("keeps the workspace panel and chat composer visible in the app shell", async () => {
+    render(<Home />);
+
+    expect(await screen.findByLabelText("Workspace 列表")).toBeInTheDocument();
+    expect(screen.getByLabelText("输入对方消息")).toBeInTheDocument();
+    expect(screen.getByLabelText("上传截图")).toBeInTheDocument();
+  });
 });
