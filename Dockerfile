@@ -4,12 +4,12 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm config set registry https://registry.npmmirror.com && npm ci
 
-# Stage 2: Build the application
+# Stage 2: Build the application (禁用 Turbopack，使用 Webpack 以兼容 standalone 模式)
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN npx next build --no-turbopack
 
 # Stage 3: Production runner
 FROM node:20-alpine AS runner
