@@ -2,11 +2,31 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Home from "../app/page";
-import { CHAT_ASSISTANT_STORAGE_KEY } from "../lib/storage";
+import { createDefaultAppData } from "../lib/storage";
+
+const defaultData = createDefaultAppData();
+let savedData: unknown = null;
+
+function mockFetch() {
+  savedData = null;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/data" && (!init || init.method === "GET")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(structuredClone(defaultData)) });
+      }
+      if (url === "/api/data" && init?.method === "PUT") {
+        savedData = JSON.parse(init.body as string);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    })
+  );
+}
 
 describe("Home app integration", () => {
   beforeEach(() => {
-    localStorage.clear();
+    mockFetch();
   });
 
   it("hydrates default workspace and persists setting edits", async () => {
@@ -19,8 +39,8 @@ describe("Home app integration", () => {
     await user.type(screen.getByLabelText("对方备注名"), "小林");
 
     await waitFor(() => {
-      const stored = JSON.parse(localStorage.getItem(CHAT_ASSISTANT_STORAGE_KEY) ?? "{}");
-      expect(stored.workspaces[0].name).toBe("小林");
+      expect(savedData).not.toBeNull();
+      expect((savedData as { workspaces: Array<{ name: string }> }).workspaces[0].name).toBe("小林");
     });
   });
 
@@ -43,14 +63,26 @@ describe("Home app integration", () => {
         controller.close();
       }
     });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      body: stream
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/data" && (!init || init.method === "GET")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(structuredClone(defaultData)) });
+        }
+        if (url === "/api/data" && init?.method === "PUT") {
+          savedData = JSON.parse(init.body as string);
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+        }
+        if (url === "/api/analyze-stream") {
+          return Promise.resolve({ ok: true, body: stream });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      })
+    );
 
     render(<Home />);
 
-    await user.click(screen.getByRole("button", { name: "⚙️ API 设置" }));
+    await user.click(await screen.findByRole("button", { name: "⚙️ API 设置" }));
     await user.type(screen.getByLabelText("API Key"), "sk-test");
     await user.type(screen.getByLabelText("输入对方消息"), "周末有空吗");
     await user.click(screen.getByRole("button", { name: "✨ 分析" }));

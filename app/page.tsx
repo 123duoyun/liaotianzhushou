@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ChatArea from "../components/ChatArea";
 import WorkspacePanel from "../components/WorkspacePanel";
-import { createId, loadAppData, saveAppData } from "../lib/storage";
+import { createId } from "../lib/storage";
 import type {
   Analysis,
   AppData,
@@ -45,13 +45,23 @@ export default function Home() {
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
 
   useEffect(() => {
-    setData(loadAppData());
+    fetch("/api/data")
+      .then((res) => res.json())
+      .then((json) => setData(json as AppData))
+      .catch(() => setData(null));
   }, []);
 
+  // Debounced save to SQLite
   useEffect(() => {
-    if (data) {
-      saveAppData(data);
-    }
+    if (!data) return;
+    const timer = setTimeout(() => {
+      fetch("/api/data", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      }).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
   }, [data]);
 
   const activeWorkspace = useMemo(
