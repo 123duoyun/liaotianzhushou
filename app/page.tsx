@@ -42,6 +42,7 @@ function buildHistory(workspace: Workspace) {
 
 export default function Home() {
   const [data, setData] = useState<AppData | null>(null);
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
 
   useEffect(() => {
     setData(loadAppData());
@@ -206,9 +207,14 @@ export default function Home() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-paper text-ink md:flex">
+    <div className="min-h-screen bg-[#edf5ed] text-ink md:flex md:h-screen md:overflow-hidden">
       <h1 className="sr-only">高情商聊天助手</h1>
-      <WorkspacePanel data={data} onChange={setData} />
+      <WorkspacePanel
+        data={data}
+        onChange={setData}
+        mobileOpen={mobileSettingsOpen}
+        onClose={() => setMobileSettingsOpen(false)}
+      />
       <ChatArea
         workspace={activeWorkspace}
         apiConfig={data.apiConfig}
@@ -217,6 +223,7 @@ export default function Home() {
         regenerateReplies={regenerateReplies}
         extractFromScreenshots={extractFromScreenshots}
         analyzeMessageStreaming={analyzeMessageStreaming}
+        onOpenSettings={() => setMobileSettingsOpen(true)}
       />
     </div>
   );

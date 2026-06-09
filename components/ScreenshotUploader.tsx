@@ -44,7 +44,7 @@ export default function ScreenshotUploader({
   }, [disabled, onImages]);
 
   return (
-    <label className="inline-flex h-10 cursor-pointer items-center rounded-xl border border-sage bg-paper px-4 text-sm font-semibold text-ink transition-all duration-200 hover:bg-coral-light">
+    <label className="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl border border-sage bg-paper px-4 text-sm font-semibold text-ink transition-all duration-200 hover:bg-coral-light">
       📷 上传截图
       <input
         ref={inputRef}

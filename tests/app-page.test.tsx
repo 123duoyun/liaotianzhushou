@@ -66,4 +66,14 @@ describe("Home app integration", () => {
     expect(screen.getByLabelText("输入对方消息")).toBeInTheDocument();
     expect(screen.getByLabelText("上传截图")).toBeInTheDocument();
   });
+
+  it("shows the refreshed workspace header and mobile settings toggle", async () => {
+    const { container } = render(<Home />);
+
+    expect(await screen.findByText("当前聊天对象")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开设置面板" })).toBeInTheDocument();
+    expect(screen.getByText("聊天工作台")).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass("min-h-screen");
+    expect(container.firstElementChild).toHaveClass("md:h-screen");
+  });
 });
