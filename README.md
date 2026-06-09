@@ -1,6 +1,6 @@
 # 高情商聊天助手
 
-一个 Next.js Web 应用，用来分析聊天对象的意图、情绪和潜台词，并生成三种风格的可直接发送回复建议。支持多个聊天对象 Workspace、连续上下文、截图识别确认和本地持久化。
+一个 Next.js Web 应用，用来分析聊天对象的意图、情绪和潜台词，并生成三种风格的可直接发送回复建议。支持多个聊天对象 Workspace、连续上下文、截图识别确认和 SQLite 持久化存储。
 
 ## 开发
 
@@ -27,7 +27,28 @@ NEXT_PUBLIC_OPENAI_API_KEY=sk-your-key
 NEXT_PUBLIC_OPENAI_MODEL=gpt-4o
 ```
 
-用户在页面里填写的配置会保存到 `localStorage`。
+用户在页面里填写的配置会保存到 SQLite 数据库（`data/chat.db`）。
+
+## Docker Compose 部署
+
+```bash
+# 构建并启动
+docker compose up -d --build
+
+# 查看日志
+docker compose logs -f
+
+# 停止
+docker compose down
+```
+
+启动后访问 `http://localhost:3000`。
+
+数据持久化在 `./data` 目录，容器重启不会丢失。也可通过环境变量传入 API 配置：
+
+```bash
+NEXT_PUBLIC_OPENAI_API_KEY=sk-xxx docker compose up -d --build
+```
 
 ## 验证
 
