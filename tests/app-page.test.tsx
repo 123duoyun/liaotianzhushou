@@ -1,0 +1,69 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import Home from "../app/page";
+import { CHAT_ASSISTANT_STORAGE_KEY } from "../lib/storage";
+
+describe("Home app integration", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("hydrates default workspace and persists setting edits", async () => {
+    const user = userEvent.setup();
+
+    render(<Home />);
+
+    expect(await screen.findByDisplayValue("新的聊天对象")).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("对方备注名"));
+    await user.type(screen.getByLabelText("对方备注名"), "小林");
+
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem(CHAT_ASSISTANT_STORAGE_KEY) ?? "{}");
+      expect(stored.workspaces[0].name).toBe("小林");
+    });
+  });
+
+  it("posts analyze requests through the streaming API route", async () => {
+    const user = userEvent.setup();
+    const analysisPayload = {
+      intent: { surface: "邀请", real: "想见面", emotion: "期待", subtext: "推进关系" },
+      risks: { misunderstand: "可能不是单独邀约", minefield: "别问还有谁", atmosphere: "↑升温" },
+      replies: [
+        { style: "温暖真诚型", emoji: "🟢", text: "好呀，我也想去", strategy: "表达兴趣" },
+        { style: "幽默轻松型", emoji: "🟡", text: "这是约我还是约展", strategy: "轻松试探" },
+        { style: "高段位型", emoji: "🔴", text: "可以，你定时间", strategy: "让对方投入" }
+      ]
+    };
+    const sseBody = `data: ${JSON.stringify({ type: "reasoning", content: "思考中..." })}\n\ndata: ${JSON.stringify({ type: "analysis", analysis: analysisPayload })}\n\n`;
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseBody));
+        controller.close();
+      }
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      body: stream
+    }));
+
+    render(<Home />);
+
+    await user.click(screen.getByRole("button", { name: "API 设置" }));
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.type(screen.getByLabelText("输入对方消息"), "周末有空吗");
+    await user.click(screen.getByRole("button", { name: "分析" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/analyze-stream", expect.objectContaining({ method: "POST" })));
+    expect(await screen.findByText("想见面")).toBeInTheDocument();
+  });
+
+  it("keeps the workspace panel and chat composer visible in the app shell", async () => {
+    render(<Home />);
+
+    expect(await screen.findByLabelText("Workspace 列表")).toBeInTheDocument();
+    expect(screen.getByLabelText("输入对方消息")).toBeInTheDocument();
+    expect(screen.getByLabelText("上传截图")).toBeInTheDocument();
+  });
+});
