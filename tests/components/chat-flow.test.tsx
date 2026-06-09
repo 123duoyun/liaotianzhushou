@@ -85,6 +85,42 @@ describe("ChatArea", () => {
     }));
   });
 
+  it("extracts screenshot messages, lets the user edit them, and saves confirmed messages", async () => {
+    const user = userEvent.setup();
+    const workspace = createWorkspace({ id: "w1", name: "小林" });
+    const onWorkspaceChange = vi.fn();
+    const extractFromScreenshots = vi.fn().mockResolvedValue([
+      { id: "e1", sender: "other", content: "在干嘛呀", time: "14:30" },
+      { id: "e2", sender: "me", content: "刚忙完", time: "14:31" }
+    ]);
+
+    render(
+      <ChatArea
+        workspace={workspace}
+        apiConfig={apiConfig}
+        onWorkspaceChange={onWorkspaceChange}
+        analyzeMessage={vi.fn()}
+        regenerateReplies={vi.fn()}
+        extractFromScreenshots={extractFromScreenshots}
+      />
+    );
+
+    const file = new File(["fake"], "chat.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText("上传截图"), file);
+
+    await waitFor(() => expect(extractFromScreenshots).toHaveBeenCalled());
+    await user.clear(await screen.findByDisplayValue("在干嘛呀"));
+    await user.type(screen.getByLabelText("编辑消息 e1"), "周末有空吗");
+    await user.click(screen.getByRole("button", { name: "确认导入" }));
+
+    expect(onWorkspaceChange).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [
+        expect.objectContaining({ sender: "other", content: "周末有空吗", source: "screenshot" }),
+        expect.objectContaining({ sender: "me", content: "刚忙完", source: "screenshot" })
+      ]
+    }));
+  });
+
   it("renders existing history collapsed after the newest analysis", () => {
     const older = createMessage({
       id: "m1",

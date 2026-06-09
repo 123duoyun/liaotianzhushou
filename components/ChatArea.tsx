@@ -2,25 +2,31 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { createMessage } from "../lib/storage";
-import type { Analysis, ApiConfig, ReplySuggestion, Workspace } from "../lib/types";
+import type { Analysis, ApiConfig, ExtractedMessage, ReplySuggestion, Workspace } from "../lib/types";
 import AnalysisCard from "./AnalysisCard";
+import ExtractedMessages from "./ExtractedMessages";
 import MessageBubble from "./MessageBubble";
+import ScreenshotUploader from "./ScreenshotUploader";
 
 export default function ChatArea({
   workspace,
   apiConfig,
   onWorkspaceChange,
   analyzeMessage,
-  regenerateReplies
+  regenerateReplies,
+  extractFromScreenshots = async () => []
 }: {
   workspace: Workspace;
   apiConfig: ApiConfig;
   onWorkspaceChange: (workspace: Workspace) => void;
   analyzeMessage: (message: string, history: Array<{ role: "user" | "assistant" | "user_selected_reply"; content: string }>) => Promise<Analysis>;
   regenerateReplies: (messageId: string) => Promise<ReplySuggestion[]>;
+  extractFromScreenshots?: (images: string[]) => Promise<ExtractedMessage[]>;
 }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [draftExtractedMessages, setDraftExtractedMessages] = useState<ExtractedMessage[]>([]);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -39,6 +45,33 @@ export default function ChatArea({
     }),
     [workspace.messages]
   );
+
+  async function handleScreenshots(images: string[]) {
+    setExtracting(true);
+    setError("");
+    try {
+      setDraftExtractedMessages(await extractFromScreenshots(images));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "截图识别失败，请重试");
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  function confirmExtractedMessages() {
+    const imported = draftExtractedMessages
+      .filter((message) => message.content.trim())
+      .map((message) =>
+        createMessage({
+          sender: message.sender,
+          content: message.content.trim(),
+          time: message.time,
+          source: "screenshot"
+        })
+      );
+    onWorkspaceChange({ ...workspace, messages: [...workspace.messages, ...imported] });
+    setDraftExtractedMessages([]);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -93,6 +126,14 @@ export default function ChatArea({
   return (
     <main className="flex min-h-screen flex-1 flex-col bg-paper">
       <div className="flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
+        {draftExtractedMessages.length > 0 ? (
+          <ExtractedMessages
+            messages={draftExtractedMessages}
+            onChange={setDraftExtractedMessages}
+            onConfirm={confirmExtractedMessages}
+            onCancel={() => setDraftExtractedMessages([])}
+          />
+        ) : null}
         {workspace.messages.length === 0 ? (
           <div className="grid min-h-[60vh] place-items-center text-center text-sage">
             <p>粘贴对方消息后开始分析</p>
@@ -117,6 +158,10 @@ export default function ChatArea({
 
       <form onSubmit={handleSubmit} className="border-t border-mist bg-white p-4">
         {error ? <div role="alert" className="mb-3 rounded bg-coral px-3 py-2 text-sm text-white">{error}</div> : null}
+        <div className="mb-3 flex items-center gap-3">
+          <ScreenshotUploader disabled={extracting} onImages={handleScreenshots} />
+          {extracting ? <span className="text-sm text-sage">识别中</span> : null}
+        </div>
         <div className="flex gap-3">
           <textarea
             aria-label="输入对方消息"
