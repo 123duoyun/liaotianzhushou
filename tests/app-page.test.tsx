@@ -24,21 +24,28 @@ describe("Home app integration", () => {
     });
   });
 
-  it("posts analyze requests through the API route client", async () => {
+  it("posts analyze requests through the streaming API route", async () => {
     const user = userEvent.setup();
+    const analysisPayload = {
+      intent: { surface: "邀请", real: "想见面", emotion: "期待", subtext: "推进关系" },
+      risks: { misunderstand: "可能不是单独邀约", minefield: "别问还有谁", atmosphere: "↑升温" },
+      replies: [
+        { style: "温暖真诚型", emoji: "🟢", text: "好呀，我也想去", strategy: "表达兴趣" },
+        { style: "幽默轻松型", emoji: "🟡", text: "这是约我还是约展", strategy: "轻松试探" },
+        { style: "高段位型", emoji: "🔴", text: "可以，你定时间", strategy: "让对方投入" }
+      ]
+    };
+    const sseBody = `data: ${JSON.stringify({ type: "reasoning", content: "思考中..." })}\n\ndata: ${JSON.stringify({ type: "analysis", analysis: analysisPayload })}\n\n`;
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseBody));
+        controller.close();
+      }
+    });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        analysis: {
-          intent: { surface: "邀请", real: "想见面", emotion: "期待", subtext: "推进关系" },
-          risks: { misunderstand: "可能不是单独邀约", minefield: "别问还有谁", atmosphere: "↑升温" },
-          replies: [
-            { style: "温暖真诚型", emoji: "🟢", text: "好呀，我也想去", strategy: "表达兴趣" },
-            { style: "幽默轻松型", emoji: "🟡", text: "这是约我还是约展", strategy: "轻松试探" },
-            { style: "高段位型", emoji: "🔴", text: "可以，你定时间", strategy: "让对方投入" }
-          ]
-        }
-      })
+      body: stream
     }));
 
     render(<Home />);
@@ -48,7 +55,7 @@ describe("Home app integration", () => {
     await user.type(screen.getByLabelText("输入对方消息"), "周末有空吗");
     await user.click(screen.getByRole("button", { name: "分析" }));
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/analyze", expect.objectContaining({ method: "POST" })));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/analyze-stream", expect.objectContaining({ method: "POST" })));
     expect(await screen.findByText("想见面")).toBeInTheDocument();
   });
 

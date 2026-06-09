@@ -85,6 +85,82 @@ export default function Home() {
     return result.analysis;
   }
 
+  async function analyzeMessageStreaming(
+    message: string,
+    history: Array<{ role: "user" | "assistant" | "user_selected_reply"; content: string }>,
+    callbacks: {
+      onReasoningToken: (content: string) => void;
+      onAnalysisComplete: (analysis: Analysis) => void;
+      onError: (message: string) => void;
+    }
+  ): Promise<void> {
+    if (!data || !activeWorkspace) {
+      callbacks.onError("Workspace 未加载");
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    try {
+      const response = await fetch("/api/analyze-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspace: {
+            gender: activeWorkspace.gender,
+            relationship: activeWorkspace.relationship,
+            goal: activeWorkspace.goal
+          },
+          history,
+          newMessage: message,
+          apiConfig: data.apiConfig
+        }),
+        signal: abortController.signal
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        callbacks.onError(errData.error ?? "请求失败");
+        return;
+      }
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+
+          try {
+            const event = JSON.parse(trimmed.slice(6));
+            if (event.type === "reasoning") {
+              callbacks.onReasoningToken(event.content);
+            } else if (event.type === "analysis") {
+              callbacks.onAnalysisComplete(event.analysis);
+            } else if (event.type === "error") {
+              callbacks.onError(event.message);
+            }
+          } catch {
+            // skip malformed events
+          }
+        }
+      }
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") {
+        callbacks.onError(error instanceof Error ? error.message : "分析失败");
+      }
+    }
+  }
+
   async function regenerateReplies(messageId: string): Promise<ReplySuggestion[]> {
     if (!data || !activeWorkspace) {
       throw new Error("Workspace 未加载");
@@ -137,6 +213,7 @@ export default function Home() {
         analyzeMessage={analyzeMessage}
         regenerateReplies={regenerateReplies}
         extractFromScreenshots={extractFromScreenshots}
+        analyzeMessageStreaming={analyzeMessageStreaming}
       />
     </div>
   );

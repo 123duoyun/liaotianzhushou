@@ -2,10 +2,11 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { createMessage } from "../lib/storage";
-import type { Analysis, ApiConfig, ExtractedMessage, ReplySuggestion, Workspace } from "../lib/types";
+import type { Analysis, ApiConfig, ExtractedMessage, ReplySuggestion, StreamingState, Workspace } from "../lib/types";
 import AnalysisCard from "./AnalysisCard";
 import ExtractedMessages from "./ExtractedMessages";
 import MessageBubble from "./MessageBubble";
+import ReasoningDisplay from "./ReasoningDisplay";
 import ScreenshotUploader from "./ScreenshotUploader";
 
 export default function ChatArea({
@@ -14,7 +15,8 @@ export default function ChatArea({
   onWorkspaceChange,
   analyzeMessage,
   regenerateReplies,
-  extractFromScreenshots = async () => []
+  extractFromScreenshots = async () => [],
+  analyzeMessageStreaming
 }: {
   workspace: Workspace;
   apiConfig: ApiConfig;
@@ -22,6 +24,15 @@ export default function ChatArea({
   analyzeMessage: (message: string, history: Array<{ role: "user" | "assistant" | "user_selected_reply"; content: string }>) => Promise<Analysis>;
   regenerateReplies: (messageId: string) => Promise<ReplySuggestion[]>;
   extractFromScreenshots?: (images: string[]) => Promise<ExtractedMessage[]>;
+  analyzeMessageStreaming?: (
+    message: string,
+    history: Array<{ role: "user" | "assistant" | "user_selected_reply"; content: string }>,
+    callbacks: {
+      onReasoningToken: (content: string) => void;
+      onAnalysisComplete: (analysis: Analysis) => void;
+      onError: (message: string) => void;
+    }
+  ) => Promise<void>;
 }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,6 +40,7 @@ export default function ChatArea({
   const [draftExtractedMessages, setDraftExtractedMessages] = useState<ExtractedMessage[]>([]);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [streamingStates, setStreamingStates] = useState<Map<string, StreamingState>>(new Map());
 
   const history = useMemo(
     () => workspace.messages.flatMap((message) => {
@@ -83,15 +95,74 @@ export default function ChatArea({
     setError("");
 
     const pendingMessage = createMessage({ sender: "other", content, source: "manual" });
-    try {
-      const analysis = await analyzeMessage(content, history);
-      onWorkspaceChange({ ...workspace, messages: [...workspace.messages, { ...pendingMessage, analysis }] });
-      setInput("");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "分析失败，请重试");
-    } finally {
-      setLoading(false);
+
+    // Add the message bubble immediately (without analysis)
+    const workspaceWithPending = { ...workspace, messages: [...workspace.messages, pendingMessage] };
+    onWorkspaceChange(workspaceWithPending);
+    setInput("");
+
+    if (analyzeMessageStreaming) {
+      // Streaming path
+      setStreamingStates(new Map([[pendingMessage.id, { phase: "reasoning", reasoningText: "", error: null }]]));
+
+      await analyzeMessageStreaming(content, history, {
+        onReasoningToken(token) {
+          setStreamingStates((prev) => {
+            const next = new Map(prev);
+            const state = next.get(pendingMessage.id);
+            if (state) {
+              next.set(pendingMessage.id, { ...state, reasoningText: state.reasoningText + token });
+            }
+            return next;
+          });
+        },
+        onAnalysisComplete(analysis) {
+          setStreamingStates((prev) => {
+            const next = new Map(prev);
+            next.delete(pendingMessage.id);
+            return next;
+          });
+          // Update the message with the analysis
+          onWorkspaceChange({
+            ...workspaceWithPending,
+            messages: workspaceWithPending.messages.map((m) =>
+              m.id === pendingMessage.id ? { ...m, analysis } : m
+            )
+          });
+        },
+        onError(message) {
+          setStreamingStates((prev) => {
+            const next = new Map(prev);
+            const state = next.get(pendingMessage.id);
+            if (state) {
+              next.set(pendingMessage.id, { ...state, phase: "error", error: message });
+            }
+            return next;
+          });
+          setError(message);
+        }
+      });
+    } else {
+      // Non-streaming fallback (original path)
+      try {
+        const analysis = await analyzeMessage(content, history);
+        onWorkspaceChange({
+          ...workspaceWithPending,
+          messages: workspaceWithPending.messages.map((m) =>
+            m.id === pendingMessage.id ? { ...m, analysis } : m
+          )
+        });
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "分析失败，请重试");
+        // Remove the pending message on error
+        onWorkspaceChange({
+          ...workspace,
+          messages: workspace.messages.filter((m) => m.id !== pendingMessage.id)
+        });
+      }
     }
+
+    setLoading(false);
   }
 
   function selectReply(messageId: string, index: number) {
@@ -142,7 +213,13 @@ export default function ChatArea({
         {workspace.messages.map((message, index) => (
           <div key={message.id} className="space-y-3">
             <MessageBubble message={message} />
-            {message.analysis ? (
+            {streamingStates.has(message.id) ? (
+              <ReasoningDisplay
+                text={streamingStates.get(message.id)!.reasoningText}
+                phase={streamingStates.get(message.id)!.phase}
+                error={streamingStates.get(message.id)!.error}
+              />
+            ) : message.analysis ? (
               <AnalysisCard
                 analysis={message.analysis}
                 selectedReplyIndex={message.selectedReplyIndex}
