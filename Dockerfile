@@ -4,12 +4,12 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm config set registry https://registry.npmmirror.com && npm ci
 
-# Stage 2: Build the application (禁用 Turbopack，使用 Webpack 以兼容 standalone 模式)
+# Stage 2: Build the application (使用 Webpack 以兼容 standalone 模式)
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx next build --no-turbopack
+RUN npx next build --webpack
 
 # Stage 3: Production runner
 FROM node:20-alpine AS runner
@@ -24,9 +24,6 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-# 复制 sql.js WASM 文件（standalone 模式不会自动包含）
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/sql.js/dist/ ./node_modules/sql.js/dist/
 
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
