@@ -1,4 +1,4 @@
-import type { ApiConfig, AppData, Gender, Message, Workspace } from "./types";
+import type { Analysis, ApiConfig, AppData, Gender, Message, MessageSource, ReplySuggestion, Sender, Workspace } from "./types";
 
 export const CHAT_ASSISTANT_STORAGE_KEY = "chat-assistant-data";
 
@@ -59,6 +59,71 @@ function isGender(value: unknown): value is Gender {
   return value === "male" || value === "female";
 }
 
+function isSender(value: unknown): value is Sender {
+  return value === "other" || value === "me";
+}
+
+function isMessageSource(value: unknown): value is MessageSource {
+  return value === "manual" || value === "screenshot";
+}
+
+function hasStringFields<T extends string>(value: unknown, fields: T[]): value is Record<T, string> {
+  return typeof value === "object"
+    && value !== null
+    && fields.every((field) => typeof (value as Record<T, unknown>)[field] === "string");
+}
+
+function isReplySuggestion(value: unknown): value is ReplySuggestion {
+  return hasStringFields(value, ["style", "emoji", "text", "strategy"]);
+}
+
+function normalizeAnalysis(value: unknown): Analysis | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const analysis = value as Partial<Analysis>;
+  if (
+    !hasStringFields(analysis.intent, ["surface", "real", "emotion", "subtext"])
+    || !hasStringFields(analysis.risks, ["misunderstand", "minefield", "atmosphere"])
+    || !Array.isArray(analysis.replies)
+    || !analysis.replies.every(isReplySuggestion)
+  ) {
+    return null;
+  }
+
+  return {
+    intent: analysis.intent,
+    risks: analysis.risks,
+    replies: analysis.replies,
+    advanced: typeof analysis.advanced === "string" ? analysis.advanced : undefined
+  };
+}
+
+function normalizeMessage(value: Partial<Message> | undefined): Message | null {
+  if (!isSender(value?.sender) || typeof value?.content !== "string") {
+    return null;
+  }
+
+  return createMessage({
+    id: typeof value.id === "string" ? value.id : undefined,
+    sender: value.sender,
+    content: value.content,
+    time: typeof value.time === "string" || value.time === null ? value.time : null,
+    source: isMessageSource(value.source) ? value.source : "manual",
+    analysis: normalizeAnalysis(value.analysis),
+    selectedReplyIndex: typeof value.selectedReplyIndex === "number" && Number.isFinite(value.selectedReplyIndex) ? value.selectedReplyIndex : null
+  });
+}
+
+function normalizeApiConfig(value: Partial<ApiConfig> | null | undefined, fallback: ApiConfig): ApiConfig {
+  return {
+    baseUrl: typeof value?.baseUrl === "string" && value.baseUrl.trim() ? value.baseUrl : fallback.baseUrl,
+    apiKey: typeof value?.apiKey === "string" ? value.apiKey : fallback.apiKey,
+    model: typeof value?.model === "string" && value.model.trim() ? value.model : fallback.model
+  };
+}
+
 function normalizeWorkspace(value: Partial<Workspace> | undefined): Workspace {
   const fallback = createWorkspace();
   return {
@@ -67,7 +132,9 @@ function normalizeWorkspace(value: Partial<Workspace> | undefined): Workspace {
     gender: isGender(value?.gender) ? value.gender : fallback.gender,
     relationship: typeof value?.relationship === "string" && value.relationship.trim() ? value.relationship : fallback.relationship,
     goal: typeof value?.goal === "string" && value.goal.trim() ? value.goal : fallback.goal,
-    messages: Array.isArray(value?.messages) ? value.messages : []
+    messages: Array.isArray(value?.messages)
+      ? value.messages.map(normalizeMessage).filter((message): message is Message => message !== null)
+      : []
   };
 }
 
@@ -83,10 +150,7 @@ export function normalizeAppData(value: Partial<AppData> | null | undefined): Ap
   return {
     workspaces,
     activeWorkspaceId,
-    apiConfig: {
-      ...fallback.apiConfig,
-      ...(value?.apiConfig ?? {})
-    }
+    apiConfig: normalizeApiConfig(value?.apiConfig, fallback.apiConfig)
   };
 }
 

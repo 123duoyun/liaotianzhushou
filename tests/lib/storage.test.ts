@@ -62,4 +62,95 @@ describe("storage helpers", () => {
     expect(data.workspaces).toHaveLength(1);
     expect(data.activeWorkspaceId).toBe(data.workspaces[0].id);
   });
+
+  it("normalizes malformed persisted messages", () => {
+    localStorage.setItem(CHAT_ASSISTANT_STORAGE_KEY, JSON.stringify({
+      workspaces: [{
+        id: "workspace_existing",
+        name: "小林",
+        gender: "female",
+        relationship: "朋友",
+        goal: "自然聊天",
+        messages: [
+          {
+            id: "message_valid",
+            sender: "other",
+            content: "今天有点累",
+            time: "20:30",
+            source: "screenshot",
+            analysis: null,
+            selectedReplyIndex: 1
+          },
+          {
+            id: "message_legacy",
+            sender: "me",
+            content: "早点休息",
+            time: 123,
+            source: "email",
+            analysis: "bad analysis",
+            selectedReplyIndex: "1"
+          },
+          {
+            id: "message_bad_sender",
+            sender: "system",
+            content: "bad"
+          },
+          {
+            id: "message_bad_content",
+            sender: "other",
+            content: 123
+          }
+        ]
+      }],
+      activeWorkspaceId: "workspace_existing",
+      apiConfig: {
+        baseUrl: "https://proxy.example.com/v1",
+        apiKey: "",
+        model: "gpt-4o-mini"
+      }
+    }));
+
+    const data = loadAppData();
+
+    expect(data.workspaces[0].messages).toEqual([
+      {
+        id: "message_valid",
+        sender: "other",
+        content: "今天有点累",
+        time: "20:30",
+        source: "screenshot",
+        analysis: null,
+        selectedReplyIndex: 1
+      },
+      {
+        id: "message_legacy",
+        sender: "me",
+        content: "早点休息",
+        time: null,
+        source: "manual",
+        analysis: null,
+        selectedReplyIndex: null
+      }
+    ]);
+  });
+
+  it("normalizes invalid persisted API config fields", () => {
+    localStorage.setItem(CHAT_ASSISTANT_STORAGE_KEY, JSON.stringify({
+      workspaces: [createWorkspace({ id: "workspace_existing" })],
+      activeWorkspaceId: "workspace_existing",
+      apiConfig: {
+        baseUrl: "",
+        apiKey: null,
+        model: 123
+      }
+    }));
+
+    const data = loadAppData();
+
+    expect(data.apiConfig).toEqual({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "",
+      model: "gpt-4o"
+    });
+  });
 });
