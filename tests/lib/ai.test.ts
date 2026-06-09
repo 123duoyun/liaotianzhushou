@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { callOpenAIJson, extractJsonObject, validateAnalysis, validateReplies } from "../../lib/ai";
+import { callOpenAIJson, callOpenAIStream, extractJsonObject, validateAnalysis, validateReplies } from "../../lib/ai";
 
 describe("AI helpers", () => {
   it("extracts JSON from plain text or fenced output", () => {
@@ -55,5 +55,45 @@ describe("AI helpers", () => {
         messages: [{ role: "user", content: "hello" }]
       })
     ).rejects.toThrow("请先在左侧填写 API Key");
+  });
+
+  it("yields reasoning and content tokens from a streaming response", async () => {
+    const encoder = new TextEncoder();
+    const chunks = [
+      'data: {"choices":[{"delta":{"reasoning_content":"让我分析"}}]}\n\n',
+      'data: {"choices":[{"delta":{"reasoning_content":"这条消息..."}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"{\\"ok\\":true}"}}]}\n\n',
+      "data: [DONE]\n\n"
+    ];
+    let index = 0;
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: new ReadableStream({
+        pull(controller) {
+          if (index < chunks.length) {
+            controller.enqueue(encoder.encode(chunks[index]));
+            index++;
+          } else {
+            controller.close();
+          }
+        }
+      })
+    });
+
+    const results: Array<{ reasoning?: string; content?: string }> = [];
+    for await (const chunk of callOpenAIStream({
+      apiConfig: { baseUrl: "https://api.example.com/v1", apiKey: "sk-test", model: "deepseek-r1" },
+      messages: [{ role: "user", content: "hello" }],
+      fetcher: fetchMock
+    })) {
+      results.push(chunk);
+    }
+
+    expect(results).toEqual([
+      { reasoning: "让我分析" },
+      { reasoning: "这条消息..." },
+      { content: '{"ok":true}' }
+    ]);
   });
 });

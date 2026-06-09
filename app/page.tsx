@@ -42,6 +42,7 @@ function buildHistory(workspace: Workspace) {
 
 export default function Home() {
   const [data, setData] = useState<AppData | null>(null);
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
 
   useEffect(() => {
     setData(loadAppData());
@@ -90,6 +91,7 @@ export default function Home() {
     history: Array<{ role: "user" | "assistant" | "user_selected_reply"; content: string }>,
     callbacks: {
       onReasoningToken: (content: string) => void;
+      onContentToken: (content: string) => void;
       onAnalysisComplete: (analysis: Analysis) => void;
       onError: (message: string) => void;
     }
@@ -144,6 +146,8 @@ export default function Home() {
             const event = JSON.parse(trimmed.slice(6));
             if (event.type === "reasoning") {
               callbacks.onReasoningToken(event.content);
+            } else if (event.type === "content") {
+              callbacks.onContentToken(event.content);
             } else if (event.type === "analysis") {
               callbacks.onAnalysisComplete(event.analysis);
             } else if (event.type === "error") {
@@ -203,9 +207,14 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-paper text-ink md:flex">
+    <div className="min-h-screen bg-[#edf5ed] text-ink md:flex md:h-screen md:overflow-hidden">
       <h1 className="sr-only">高情商聊天助手</h1>
-      <WorkspacePanel data={data} onChange={setData} />
+      <WorkspacePanel
+        data={data}
+        onChange={setData}
+        mobileOpen={mobileSettingsOpen}
+        onClose={() => setMobileSettingsOpen(false)}
+      />
       <ChatArea
         workspace={activeWorkspace}
         apiConfig={data.apiConfig}
@@ -214,6 +223,7 @@ export default function Home() {
         regenerateReplies={regenerateReplies}
         extractFromScreenshots={extractFromScreenshots}
         analyzeMessageStreaming={analyzeMessageStreaming}
+        onOpenSettings={() => setMobileSettingsOpen(true)}
       />
     </div>
   );

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/almonster/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/requesting-code-review/**)",
+      "Bash(npx vitest *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(npm test *)",
+      "Bash(npx eslint *)",
+      "Bash(node -e \"console.log\\(require\\('vitest/package.json'\\).version\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(git stash *)",
+      "Bash(git checkout *)",
+      "Bash(npx next *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

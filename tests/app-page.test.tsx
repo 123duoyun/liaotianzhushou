@@ -50,10 +50,10 @@ describe("Home app integration", () => {
 
     render(<Home />);
 
-    await user.click(screen.getByRole("button", { name: "API 设置" }));
+    await user.click(screen.getByRole("button", { name: "⚙️ API 设置" }));
     await user.type(screen.getByLabelText("API Key"), "sk-test");
     await user.type(screen.getByLabelText("输入对方消息"), "周末有空吗");
-    await user.click(screen.getByRole("button", { name: "分析" }));
+    await user.click(screen.getByRole("button", { name: "✨ 分析" }));
 
     await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/analyze-stream", expect.objectContaining({ method: "POST" })));
     expect(await screen.findByText("想见面")).toBeInTheDocument();
@@ -65,5 +65,15 @@ describe("Home app integration", () => {
     expect(await screen.findByLabelText("Workspace 列表")).toBeInTheDocument();
     expect(screen.getByLabelText("输入对方消息")).toBeInTheDocument();
     expect(screen.getByLabelText("上传截图")).toBeInTheDocument();
+  });
+
+  it("shows the refreshed workspace header and mobile settings toggle", async () => {
+    const { container } = render(<Home />);
+
+    expect(await screen.findByText("当前聊天对象")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开设置面板" })).toBeInTheDocument();
+    expect(screen.getByText("聊天工作台")).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass("min-h-screen");
+    expect(container.firstElementChild).toHaveClass("md:h-screen");
   });
 });

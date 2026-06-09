@@ -34,6 +34,7 @@ export async function POST(request: Request) {
           }
           if (chunk.content) {
             contentBuffer += chunk.content;
+            sendSSE(controller, { type: "content", content: chunk.content });
           }
         }
 

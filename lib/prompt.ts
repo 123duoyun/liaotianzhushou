@@ -89,6 +89,29 @@ ${input.previousReplies.map((reply, index) => `${index + 1}. ${reply}`).join("\n
 }`;
 }
 
+export function buildReasoningPrompt(input: PromptAnalysisInput): string {
+  return `你是一个高情商聊天助手。请分析以下消息，用中文自然语言表达你的推理过程。
+
+用户信息：
+- 性别：${input.workspace.gender}
+- 与对方关系：${input.workspace.relationship}
+- 期望效果：${input.workspace.goal}
+
+历史上下文：
+${formatHistory(input.history)}
+
+需要分析的消息：
+${input.newMessage}
+
+请用中文自然语言分析以下内容（不要输出 JSON）：
+1. 这条消息的表面意思和真实意图
+2. 对方的情绪状态和话外之音
+3. 可能的风险点或需要注意的地方
+4. 回复的大致方向
+
+请直接输出你的推理过程，用自然流畅的中文。`;
+}
+
 export function buildScreenshotExtractionPrompt(): string {
   return `请识别聊天截图中的对话记录。按时间顺序提取每条消息。
 

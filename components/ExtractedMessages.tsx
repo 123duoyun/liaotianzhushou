@@ -18,10 +18,10 @@ export default function ExtractedMessages({
   }
 
   return (
-    <section className="rounded border border-mist bg-white p-4 shadow-sm">
+    <section className="rounded-xl border border-mist bg-white p-4 shadow-md">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold">确认截图识别结果</h2>
-        <button type="button" onClick={onCancel} className="text-sm text-coral">取消</button>
+        <h2 className="text-sm font-semibold text-ink">📸 确认截图识别结果</h2>
+        <button type="button" onClick={onCancel} className="text-sm text-red-500 transition-all duration-200 hover:text-red-700">取消</button>
       </div>
       <div className="space-y-3">
         {messages.map((message) => (
@@ -30,7 +30,7 @@ export default function ExtractedMessages({
               aria-label={`发送方 ${message.id}`}
               value={message.sender}
               onChange={(event) => updateMessage(message.id, { sender: event.target.value as Sender })}
-              className="h-10 rounded border border-mist px-2"
+              className="h-10 rounded-xl border border-mist px-2 text-ink"
             >
               <option value="other">对方</option>
               <option value="me">我</option>
@@ -39,13 +39,13 @@ export default function ExtractedMessages({
               aria-label={`编辑消息 ${message.id}`}
               value={message.content}
               onChange={(event) => updateMessage(message.id, { content: event.target.value })}
-              className="h-10 rounded border border-mist px-3"
+              className="h-10 rounded-xl border border-mist px-3 text-ink transition-all duration-200 focus:border-coral focus:ring-2 focus:ring-coral/20"
             />
             <button
               type="button"
               aria-label={`删除消息 ${message.id}`}
               onClick={() => onChange(messages.filter((item) => item.id !== message.id))}
-              className="h-10 rounded border border-mist text-coral"
+              className="h-10 rounded-xl border border-mist text-red-500 transition-all duration-200 hover:border-red-300 hover:bg-red-50"
             >
               ×
             </button>
@@ -55,9 +55,9 @@ export default function ExtractedMessages({
       <button
         type="button"
         onClick={onConfirm}
-        className="mt-4 h-10 rounded bg-coral px-4 text-sm font-semibold text-white"
+        className="mt-4 h-10 rounded-xl bg-coral-dark px-4 text-sm font-semibold text-white shadow-green transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
       >
-        确认导入
+        ✅ 确认导入
       </button>
     </section>
   );

@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_OPENAI_BASE_URL=${NEXT_PUBLIC_OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - NEXT_PUBLIC_OPENAI_API_KEY=${NEXT_PUBLIC_OPENAI_API_KEY:-}
+      - NEXT_PUBLIC_OPENAI_MODEL=${NEXT_PUBLIC_OPENAI_MODEL:-gpt-4o}
+    restart: unless-stopped

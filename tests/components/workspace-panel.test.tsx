@@ -52,7 +52,7 @@ describe("WorkspacePanel", () => {
 
     render(<ControlledWorkspacePanel initialData={data} onChange={onChange} />);
 
-    await user.click(screen.getByRole("button", { name: "API 设置" }));
+    await user.click(screen.getByRole("button", { name: "⚙️ API 设置" }));
     await user.clear(screen.getByLabelText("模型名称"));
     await user.type(screen.getByLabelText("模型名称"), "gpt-4o-mini");
 
