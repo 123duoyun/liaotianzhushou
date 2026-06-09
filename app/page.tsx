@@ -43,12 +43,38 @@ function buildHistory(workspace: Workspace) {
 export default function Home() {
   const [data, setData] = useState<AppData | null>(null);
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/data")
-      .then((res) => res.json())
-      .then((json) => setData(json as AppData))
-      .catch(() => setData(null));
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setLoadingError(null);
+
+        const res = await fetch("/api/data");
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP ${res.status}: 请求失败`);
+        }
+
+        const json = await res.json();
+
+        if (json.error) {
+          throw new Error(json.error);
+        }
+
+        setData(json as AppData);
+      } catch (error) {
+        console.error("Failed to load data:", error);
+        setLoadingError(error instanceof Error ? error.message : "加载数据失败");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
   }, []);
 
   // Debounced save to SQLite
@@ -212,8 +238,48 @@ export default function Home() {
     return result.messages.map((message) => ({ ...message, id: createId("extracted") }));
   }
 
+  if (isLoading) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-paper text-sage">
+        <div className="text-center">
+          <div className="mb-4 text-lg">加载中...</div>
+          <div className="text-sm opacity-70">正在初始化数据库，请稍候</div>
+        </div>
+      </main>
+    );
+  }
+
+  if (loadingError) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-paper text-sage">
+        <div className="text-center max-w-md p-6">
+          <div className="mb-4 text-lg text-red-600">加载失败</div>
+          <div className="mb-4 text-sm">{loadingError}</div>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            重试
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   if (!data || !activeWorkspace) {
-    return <main className="grid min-h-screen place-items-center bg-paper text-sage">加载中</main>;
+    return (
+      <main className="grid min-h-screen place-items-center bg-paper text-sage">
+        <div className="text-center">
+          <div className="mb-4 text-lg">数据为空</div>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            重新加载
+          </button>
+        </div>
+      </main>
+    );
   }
 
   return (

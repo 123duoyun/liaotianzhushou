@@ -25,6 +25,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# 复制 sql.js WASM 文件（standalone 模式不会自动包含）
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/sql.js/dist/ ./node_modules/sql.js/dist/
+
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
 USER nextjs
