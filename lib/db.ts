@@ -1,267 +1,184 @@
-import initSqlJs, { type Database } from "sql.js";
-import path from "path";
 import fs from "fs";
-import type { Analysis, ApiConfig, AppData, Message, Workspace } from "./types";
+import path from "path";
+import { Low } from "lowdb";
+import { JSONFile } from "lowdb/node";
+import type { ApiConfig, AppData, Message, Workspace } from "./types";
 
 const DATA_DIR = path.resolve(process.cwd(), "data");
-const DB_PATH = path.join(DATA_DIR, "chat.db");
+const DB_PATH = path.join(DATA_DIR, "chat.json");
 
-let _db: Database | null = null;
-let _initPromise: Promise<Database> | null = null;
+let _db: Low<AppData> | null = null;
+let _initPromise: Promise<Low<AppData>> | null = null;
 
-function saveToDisk() {
-  if (!_db) return;
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const data = _db.export();
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
-  } catch (error) {
-    console.error("Failed to save database to disk:", error);
-  }
+function createDefaultData(): AppData {
+  return {
+    workspaces: [{
+      id: "workspace_default",
+      name: "新的聊天对象",
+      gender: "male",
+      relationship: "暧昧",
+      goal: "拉近距离",
+      messages: [],
+    }],
+    activeWorkspaceId: "workspace_default",
+    apiConfig: createDefaultApiConfig(),
+  };
 }
 
-async function getDb(): Promise<Database> {
+function createDefaultApiConfig(): ApiConfig {
+  return {
+    baseUrl: process.env.NEXT_PUBLIC_OPENAI_BASE_URL || "https://api.openai.com/v1",
+    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || "",
+    model: process.env.NEXT_PUBLIC_OPENAI_MODEL || "gpt-4o",
+  };
+}
+
+function normalizeData(data: AppData): AppData {
+  const defaultData = createDefaultData();
+  const workspaces = Array.isArray(data.workspaces) ? data.workspaces : defaultData.workspaces;
+  const activeWorkspaceId = workspaces.some((workspace) => workspace.id === data.activeWorkspaceId)
+    ? data.activeWorkspaceId
+    : workspaces[0]?.id || "";
+
+  return {
+    workspaces: workspaces.length > 0 ? workspaces : defaultData.workspaces,
+    activeWorkspaceId: activeWorkspaceId || defaultData.activeWorkspaceId,
+    apiConfig: {
+      ...defaultData.apiConfig,
+      ...(data.apiConfig || {}),
+    },
+  };
+}
+
+async function getDb(): Promise<Low<AppData>> {
   if (_db) return _db;
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    try {
-      // 设置超时，防止 WASM 加载卡住
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Database initialization timeout (30s)")), 30000);
-      });
-
-      const initPromise = (async () => {
-        const SQL = await initSqlJs({
-          locateFile: (file) => {
-            // 优先使用本地文件
-            const sqlJsPath = path.resolve(process.cwd(), "node_modules", "sql.js", "dist", file);
-            if (fs.existsSync(sqlJsPath)) {
-              return sqlJsPath;
-            }
-            // 备用方案：使用 CDN
-            console.warn(`WASM file not found locally: ${sqlJsPath}, using CDN fallback`);
-            return `https://sql.js.org/dist/${file}`;
-          },
-        });
-
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-
-        if (fs.existsSync(DB_PATH)) {
-          const buf = fs.readFileSync(DB_PATH);
-          _db = new SQL.Database(buf);
-        } else {
-          _db = new SQL.Database();
-        }
-
-        _db.run("PRAGMA foreign_keys = ON");
-        _db.run(`
-          CREATE TABLE IF NOT EXISTS workspaces (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            gender TEXT NOT NULL DEFAULT 'male',
-            relationship TEXT NOT NULL DEFAULT '',
-            goal TEXT NOT NULL DEFAULT ''
-          )
-        `);
-        _db.run(`
-          CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY,
-            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            sender TEXT NOT NULL,
-            content TEXT NOT NULL,
-            time TEXT,
-            source TEXT NOT NULL DEFAULT 'manual',
-            analysis TEXT,
-            selected_reply_index INTEGER
-          )
-        `);
-        _db.run(`
-          CREATE TABLE IF NOT EXISTS app_config (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-          )
-        `);
-        saveToDisk();
-        return _db;
-      })();
-
-      // 使用 Promise.race 实现超时
-      return await Promise.race([initPromise, timeoutPromise]);
-    } catch (error) {
-      console.error("Failed to initialize database:", error);
-      _initPromise = null; // 重置，允许重试
-      throw error;
-    }
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const db = new Low<AppData>(new JSONFile<AppData>(DB_PATH), createDefaultData());
+    await db.read();
+    db.data = normalizeData(db.data);
+    await db.write();
+    _db = db;
+    return db;
   })();
 
   return _initPromise;
 }
 
-// ---- Helpers ----
+async function writeData(data: AppData): Promise<void> {
+  const db = await getDb();
+  db.data = normalizeData(data);
+  await db.write();
+}
 
 // ---- Workspaces ----
 
 export async function getWorkspaces(): Promise<Workspace[]> {
   const db = await getDb();
-  const stmt = db.prepare("SELECT * FROM workspaces");
-  const workspaces: Workspace[] = [];
-  while (stmt.step()) {
-    const row = stmt.getAsObject() as { id: string; name: string; gender: string; relationship: string; goal: string };
-    workspaces.push({
-      id: row.id,
-      name: row.name,
-      gender: row.gender as Workspace["gender"],
-      relationship: row.relationship,
-      goal: row.goal,
-      messages: await getMessages(row.id),
-    });
-  }
-  stmt.free();
-  return workspaces;
+  return db.data.workspaces;
 }
 
 export async function upsertWorkspace(ws: Workspace): Promise<void> {
   const db = await getDb();
-  db.run(
-    `INSERT INTO workspaces (id, name, gender, relationship, goal)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       name=excluded.name, gender=excluded.gender, relationship=excluded.relationship, goal=excluded.goal`,
-    [ws.id, ws.name, ws.gender, ws.relationship, ws.goal]
-  );
-  saveToDisk();
+  const index = db.data.workspaces.findIndex((workspace) => workspace.id === ws.id);
+
+  if (index >= 0) {
+    db.data.workspaces[index] = {
+      ...ws,
+      messages: ws.messages ?? db.data.workspaces[index].messages,
+    };
+  } else {
+    db.data.workspaces.push({
+      ...ws,
+      messages: ws.messages ?? [],
+    });
+  }
+
+  if (!db.data.activeWorkspaceId) {
+    db.data.activeWorkspaceId = ws.id;
+  }
+
+  await db.write();
 }
 
 export async function deleteWorkspace(id: string): Promise<void> {
   const db = await getDb();
-  db.run("DELETE FROM workspaces WHERE id = ?", [id]);
-  saveToDisk();
+  db.data.workspaces = db.data.workspaces.filter((workspace) => workspace.id !== id);
+
+  if (db.data.activeWorkspaceId === id) {
+    db.data.activeWorkspaceId = db.data.workspaces[0]?.id || "";
+  }
+
+  await db.write();
 }
 
 // ---- Messages ----
 
 export async function getMessages(workspaceId: string): Promise<Message[]> {
   const db = await getDb();
-  const stmt = db.prepare("SELECT * FROM messages WHERE workspace_id = ? ORDER BY rowid");
-  stmt.bind([workspaceId]);
-
-  const messages: Message[] = [];
-  while (stmt.step()) {
-    const row = stmt.getAsObject() as {
-      id: string; workspace_id: string; sender: string; content: string;
-      time: string | null; source: string; analysis: string | null; selected_reply_index: number | null;
-    };
-    messages.push({
-      id: row.id,
-      sender: row.sender as Message["sender"],
-      content: row.content,
-      time: row.time,
-      source: row.source as Message["source"],
-      analysis: row.analysis ? (JSON.parse(row.analysis) as Analysis) : null,
-      selectedReplyIndex: row.selected_reply_index,
-    });
-  }
-  stmt.free();
-  return messages;
+  return db.data.workspaces.find((workspace) => workspace.id === workspaceId)?.messages ?? [];
 }
 
 export async function upsertMessage(workspaceId: string, msg: Message): Promise<void> {
   const db = await getDb();
-  db.run(
-    `INSERT INTO messages (id, workspace_id, sender, content, time, source, analysis, selected_reply_index)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       sender=excluded.sender, content=excluded.content, time=excluded.time, source=excluded.source,
-       analysis=excluded.analysis, selected_reply_index=excluded.selected_reply_index`,
-    [
-      msg.id, workspaceId, msg.sender, msg.content, msg.time ?? null, msg.source,
-      msg.analysis ? JSON.stringify(msg.analysis) : null, msg.selectedReplyIndex ?? null,
-    ]
-  );
-  saveToDisk();
+  const workspace = db.data.workspaces.find((item) => item.id === workspaceId);
+  if (!workspace) return;
+
+  const index = workspace.messages.findIndex((message) => message.id === msg.id);
+  if (index >= 0) {
+    workspace.messages[index] = msg;
+  } else {
+    workspace.messages.push(msg);
+  }
+
+  await db.write();
 }
 
 export async function deleteMessage(id: string): Promise<void> {
   const db = await getDb();
-  db.run("DELETE FROM messages WHERE id = ?", [id]);
-  saveToDisk();
+
+  for (const workspace of db.data.workspaces) {
+    workspace.messages = workspace.messages.filter((message) => message.id !== id);
+  }
+
+  await db.write();
 }
 
 // ---- App Config ----
 
 export async function getConfig(): Promise<ApiConfig & { activeWorkspaceId: string }> {
   const db = await getDb();
-  const stmt = db.prepare("SELECT key, value FROM app_config");
-  const map: Record<string, string> = {};
-  while (stmt.step()) {
-    const row = stmt.getAsObject() as { key: string; value: string };
-    map[row.key] = row.value;
-  }
-  stmt.free();
+  const defaults = createDefaultApiConfig();
 
   return {
-    baseUrl: map.baseUrl || process.env.NEXT_PUBLIC_OPENAI_BASE_URL || "https://api.openai.com/v1",
-    apiKey: map.apiKey || process.env.NEXT_PUBLIC_OPENAI_API_KEY || "",
-    model: map.model || process.env.NEXT_PUBLIC_OPENAI_MODEL || "gpt-4o",
-    activeWorkspaceId: map.activeWorkspaceId || "",
+    baseUrl: db.data.apiConfig.baseUrl || defaults.baseUrl,
+    apiKey: db.data.apiConfig.apiKey || defaults.apiKey,
+    model: db.data.apiConfig.model || defaults.model,
+    activeWorkspaceId: db.data.activeWorkspaceId || "",
   };
 }
 
 export async function setConfig(key: string, value: string): Promise<void> {
   const db = await getDb();
-  db.run(
-    "INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-    [key, value]
-  );
-  saveToDisk();
+
+  if (key === "activeWorkspaceId") {
+    db.data.activeWorkspaceId = value;
+  } else if (key === "baseUrl" || key === "apiKey" || key === "model") {
+    db.data.apiConfig[key] = value;
+  }
+
+  await db.write();
 }
 
 // ---- Full Data (for /api/data) ----
 
 export async function loadFullData(): Promise<AppData> {
-  const workspaces = await getWorkspaces();
-  const config = await getConfig();
-
-  const activeWorkspaceId = workspaces.some((w) => w.id === config.activeWorkspaceId)
-    ? config.activeWorkspaceId
-    : workspaces[0]?.id || "";
-
-  return {
-    workspaces: workspaces.length > 0 ? workspaces : [{
-      id: "workspace_default",
-      name: "新的聊天对象",
-      gender: "male" as const,
-      relationship: "暧昧",
-      goal: "拉近距离",
-      messages: [],
-    }],
-    activeWorkspaceId,
-    apiConfig: {
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-      model: config.model,
-    },
-  };
+  const db = await getDb();
+  return normalizeData(db.data);
 }
 
 export async function saveFullData(data: AppData): Promise<void> {
-  const db = await getDb();
-
-  db.run("DELETE FROM messages");
-  db.run("DELETE FROM workspaces");
-  db.run("DELETE FROM app_config");
-
-  for (const ws of data.workspaces) {
-    await upsertWorkspace(ws);
-    for (const msg of ws.messages) {
-      await upsertMessage(ws.id, msg);
-    }
-  }
-
-  await setConfig("activeWorkspaceId", data.activeWorkspaceId);
-  await setConfig("baseUrl", data.apiConfig.baseUrl);
-  await setConfig("apiKey", data.apiConfig.apiKey);
-  await setConfig("model", data.apiConfig.model);
-  saveToDisk();
+  await writeData(data);
 }

@@ -77,7 +77,7 @@ export default function Home() {
     fetchData();
   }, []);
 
-  // Debounced save to SQLite
+  // Debounced save to server-side storage
   useEffect(() => {
     if (!data) return;
     const timer = setTimeout(() => {

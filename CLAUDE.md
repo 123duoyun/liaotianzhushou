@@ -10,8 +10,8 @@ This is a **Chat Assistant** (聊天助手) - a Next.js 15 application that anal
 
 - **Framework**: Next.js 16 with App Router + Turbopack
 - **Language**: TypeScript (strict mode)
-- **Database**: SQLite via sql.js (pure JS, WASM-based, Turbopack compatible)
-- **Storage**: localStorage (client-side) + SQLite (server-side)
+- **Database**: lowdb JSON file storage
+- **Storage**: localStorage (client-side) + lowdb (server-side)
 - **Styling**: Tailwind CSS 3 + shadcn/ui + Radix UI
 - **AI**: Claude API (Anthropic) or OpenAI API
 - **OCR**: Google Cloud Vision API
@@ -47,13 +47,9 @@ The app uses a **hybrid storage pattern**:
 
 1. **Client-side (localStorage)**: Stores workspaces and messages in the browser via `lib/storage.ts`. Used for persistence across page refreshes.
 
-2. **Server-side (SQLite)**: SQLite database (`data/chat.db`) stores messages and config via `lib/db.ts`. Uses sql.js (pure JS, WASM-based) with Turbopack compatibility.
+2. **Server-side (lowdb)**: lowdb JSON database (`data/chat.json`) stores messages and config via `lib/db.ts`.
 
-**Important**: These two storage systems are **not synchronized**. The client storage is the primary source of truth for the UI, while server SQLite is used for API operations (messages CRUD, data export).
-
-### Turbopack + sql.js Configuration
-
-The project uses Turbopack for development. sql.js WASM files are handled via `serverExternalPackages` in `next.config.ts` to avoid bundling issues. The WASM loader in `lib/db.ts` uses direct file path resolution to `node_modules/sql.js/dist/`.
+**Important**: These two storage systems are **not synchronized**. The client storage is the primary source of truth for the UI, while server lowdb storage is used for API operations (messages CRUD, data export).
 
 ### App Router Structure
 
@@ -62,8 +58,8 @@ app/
 ├── layout.tsx          # Root layout with font config (Geist)
 ├── page.tsx            # Main page - renders ChatAssistant component
 └── api/
-    ├── messages/route.ts           # GET/POST messages (SQLite)
-    ├── workspaces/route.ts         # GET workspaces (SQLite)
+    ├── messages/route.ts           # GET/POST messages (lowdb)
+    ├── workspaces/route.ts         # GET workspaces (lowdb)
     ├── analyze/route.ts            # POST full analysis (OpenAI)
     ├── analyze-stream/route.ts     # POST streaming analysis (SSE)
     ├── regenerate-replies/route.ts # POST regenerate replies only
@@ -94,7 +90,7 @@ The analysis flow is:
 1. **Screenshot Upload** → `POST /api/extract-from-screenshot`
    - Google Vision OCR → raw text
    - LLM parsing → structured messages (date, sender, content)
-   - Saves to SQLite
+   - Saves to lowdb
 
 2. **Chat Analysis** → `POST /api/analyze` or `POST /api/analyze-stream`
    - Input: messages array + context (platform, relationship)
@@ -123,18 +119,15 @@ OPENAI_BASE_URL=https://custom-api.com/v1  # Custom API endpoint
 
 ## Common Patterns
 
-### Database Access (sql.js)
+### Database Access (lowdb)
 
-The SQLite connection is managed as a singleton promise in `lib/db.ts`:
+The lowdb connection is managed as a singleton promise in `lib/db.ts`:
 
 ```typescript
-import { getDb } from '@/lib/db';
+import { loadFullData } from '@/lib/db';
 
-const db = await getDb();
-const results = db.exec('SELECT * FROM messages WHERE workspace_id = ?', [workspaceId]);
+const data = await loadFullData();
 ```
-
-**Note**: `db.exec()` returns an array of result objects with `{ columns: string[], values: any[][] }` format. Use `db.prepare()` for prepared statements with better performance.
 
 ### Client Storage
 
@@ -214,7 +207,7 @@ describe('Component', () => {
 
 - `app/page.tsx` - Entry point, renders ChatAssistant
 - `components/ChatAssistant.tsx` - Main state management and business logic
-- `lib/db.ts` - SQLite connection and schema
+- `lib/db.ts` - lowdb connection and persistence helpers
 - `lib/storage.ts` - Client-side localStorage operations
 - `lib/ai.ts` - LLM API client (supports Claude and OpenAI)
 - `lib/prompt.ts` - All prompt templates for AI analysis
@@ -226,10 +219,10 @@ describe('Component', () => {
 
 ## Development Notes
 
-- The SQLite database file is at `data/chat.db` (gitignored)
+- The lowdb database file is at `data/chat.json` (gitignored)
 - The `.next/` directory contains build artifacts (gitignored)
 - CSS uses Tailwind v3 with `@tailwind` directives in `app/globals.css`
 - shadcn components are configured in `components.json`
 - The app supports both Chinese and English UI text
 - Turbopack is used for development (faster HMR), Webpack for production builds
-- sql.js WASM files are located in `node_modules/sql.js/dist/` and loaded at runtime
+- lowdb stores server-side data as JSON in the `data/` directory
