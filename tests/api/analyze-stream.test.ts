@@ -53,7 +53,8 @@ describe("POST /api/analyze-stream", () => {
 
     expect(events[0]).toEqual({ type: "reasoning", content: "让我分析这条消息" });
     expect(events[1]).toEqual({ type: "reasoning", content: "对方想见面" });
-    expect(events[2]).toMatchObject({ type: "analysis", analysis: { intent: { real: "想见面" } } });
-    expect(events[3]).toEqual({ type: "done" });
+    expect(events[2]).toMatchObject({ type: "content" });
+    expect(events[3]).toMatchObject({ type: "analysis", analysis: { intent: { real: "想见面" } } });
+    expect(events[4]).toEqual({ type: "done" });
   });
 });

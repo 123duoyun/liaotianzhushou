@@ -102,5 +102,6 @@ export type AnalysisStreamPhase = "idle" | "reasoning" | "analyzing" | "complete
 export interface StreamingState {
   phase: AnalysisStreamPhase;
   reasoningText: string;
+  contentText: string;
   error: string | null;
 }

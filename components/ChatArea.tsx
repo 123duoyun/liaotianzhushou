@@ -29,6 +29,7 @@ export default function ChatArea({
     history: Array<{ role: "user" | "assistant" | "user_selected_reply"; content: string }>,
     callbacks: {
       onReasoningToken: (content: string) => void;
+      onContentToken: (content: string) => void;
       onAnalysisComplete: (analysis: Analysis) => void;
       onError: (message: string) => void;
     }
@@ -103,7 +104,7 @@ export default function ChatArea({
 
     if (analyzeMessageStreaming) {
       // Streaming path
-      setStreamingStates(new Map([[pendingMessage.id, { phase: "reasoning", reasoningText: "", error: null }]]));
+      setStreamingStates(new Map([[pendingMessage.id, { phase: "reasoning", reasoningText: "", contentText: "", error: null }]]));
 
       await analyzeMessageStreaming(content, history, {
         onReasoningToken(token) {
@@ -112,6 +113,16 @@ export default function ChatArea({
             const state = next.get(pendingMessage.id);
             if (state) {
               next.set(pendingMessage.id, { ...state, reasoningText: state.reasoningText + token });
+            }
+            return next;
+          });
+        },
+        onContentToken(token) {
+          setStreamingStates((prev) => {
+            const next = new Map(prev);
+            const state = next.get(pendingMessage.id);
+            if (state) {
+              next.set(pendingMessage.id, { ...state, contentText: state.contentText + token });
             }
             return next;
           });
@@ -215,7 +226,8 @@ export default function ChatArea({
             <MessageBubble message={message} />
             {streamingStates.has(message.id) ? (
               <ReasoningDisplay
-                text={streamingStates.get(message.id)!.reasoningText}
+                reasoningText={streamingStates.get(message.id)!.reasoningText}
+                contentText={streamingStates.get(message.id)!.contentText}
                 phase={streamingStates.get(message.id)!.phase}
                 error={streamingStates.get(message.id)!.error}
               />
