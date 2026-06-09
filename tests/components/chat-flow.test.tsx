@@ -1,16 +1,39 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 import ChatArea from "../../components/ChatArea";
 import { createMessage, createWorkspace } from "../../lib/storage";
 import type { ApiConfig, Workspace } from "../../lib/types";
 
 const apiConfig: ApiConfig = { baseUrl: "https://api.example.com/v1", apiKey: "sk-test", model: "gpt-test" };
 
+function ControlledChatArea(props: {
+  initialWorkspace: Workspace;
+  apiConfig: ApiConfig;
+  analyzeMessage: ReturnType<typeof vi.fn>;
+  regenerateReplies: ReturnType<typeof vi.fn>;
+  onWorkspaceChange?: (workspace: Workspace) => void;
+}) {
+  const [workspace, setWorkspace] = useState(props.initialWorkspace);
+  return (
+    <ChatArea
+      workspace={workspace}
+      apiConfig={props.apiConfig}
+      onWorkspaceChange={(next) => {
+        setWorkspace(next);
+        props.onWorkspaceChange?.(next);
+      }}
+      analyzeMessage={props.analyzeMessage}
+      regenerateReplies={props.regenerateReplies}
+    />
+  );
+}
+
 describe("ChatArea", () => {
   it("adds a manual message, analyzes it, selects a reply, and regenerates replies", async () => {
     const user = userEvent.setup();
-    const workspace = createWorkspace({ id: "w1", name: "小林" });
+    const initialWorkspace = createWorkspace({ id: "w1", name: "小林" });
     const onWorkspaceChange = vi.fn();
     const analyzeMessage = vi.fn().mockResolvedValue({
       intent: { surface: "邀请看展", real: "想见面", emotion: "期待", subtext: "推进关系" },
@@ -29,8 +52,8 @@ describe("ChatArea", () => {
     ]);
 
     render(
-      <ChatArea
-        workspace={workspace}
+      <ControlledChatArea
+        initialWorkspace={initialWorkspace}
         apiConfig={apiConfig}
         onWorkspaceChange={onWorkspaceChange}
         analyzeMessage={analyzeMessage}
@@ -78,7 +101,22 @@ describe("ChatArea", () => {
         ]
       }
     });
-    const workspace: Workspace = createWorkspace({ id: "w1", messages: [older] });
+    const newer = createMessage({
+      id: "m2",
+      sender: "other",
+      content: "你在忙什么呀",
+      source: "manual",
+      analysis: {
+        intent: { surface: "关心", real: "想了解近况", emotion: "好奇", subtext: "继续话题" },
+        risks: { misunderstand: "可能只是客套", minefield: "别说在忙", atmosphere: "→持平" },
+        replies: [
+          { style: "温暖真诚型", emoji: "🟢", text: "在想你呀", strategy: "甜蜜回应" },
+          { style: "幽默轻松型", emoji: "🟡", text: "忙着想你", strategy: "幽默撩" },
+          { style: "高段位型", emoji: "🔴", text: "刚忙完，正好想跟你聊", strategy: "自然过渡" }
+        ]
+      }
+    });
+    const workspace: Workspace = createWorkspace({ id: "w1", messages: [older, newer] });
 
     render(
       <ChatArea

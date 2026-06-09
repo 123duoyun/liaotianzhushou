@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { createMessage } from "../lib/storage";
-import type { Analysis, ApiConfig, Message, ReplySuggestion, Workspace } from "../lib/types";
+import type { Analysis, ApiConfig, ReplySuggestion, Workspace } from "../lib/types";
 import AnalysisCard from "./AnalysisCard";
 import MessageBubble from "./MessageBubble";
 
@@ -23,22 +23,9 @@ export default function ChatArea({
   const [loading, setLoading] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [localMessages, setLocalMessages] = useState<Message[]>(workspace.messages);
-  const [freshlyAnalyzedIds, setFreshlyAnalyzedIds] = useState<Set<string>>(new Set());
-
-  // Sync local messages when workspace.messages changes from parent
-  const prevWorkspaceMessagesRef = useRef(workspace.messages);
-  useEffect(() => {
-    if (workspace.messages !== prevWorkspaceMessagesRef.current) {
-      prevWorkspaceMessagesRef.current = workspace.messages;
-      setLocalMessages(workspace.messages);
-    }
-  }, [workspace.messages]);
-
-  const messages = localMessages;
 
   const history = useMemo(
-    () => messages.flatMap((message) => {
+    () => workspace.messages.flatMap((message) => {
       const items: Array<{ role: "user" | "assistant" | "user_selected_reply"; content: string }> = [
         { role: "user", content: message.content }
       ];
@@ -50,13 +37,8 @@ export default function ChatArea({
       }
       return items;
     }),
-    [messages]
+    [workspace.messages]
   );
-
-  function updateWorkspace(newMessages: Message[]) {
-    setLocalMessages(newMessages);
-    onWorkspaceChange({ ...workspace, messages: newMessages });
-  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -70,10 +52,7 @@ export default function ChatArea({
     const pendingMessage = createMessage({ sender: "other", content, source: "manual" });
     try {
       const analysis = await analyzeMessage(content, history);
-      const newMessage = { ...pendingMessage, analysis };
-      setFreshlyAnalyzedIds((prev) => new Set(prev).add(newMessage.id));
-      const newMessages = [...messages, newMessage];
-      updateWorkspace(newMessages);
+      onWorkspaceChange({ ...workspace, messages: [...workspace.messages, { ...pendingMessage, analysis }] });
       setInput("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "分析失败，请重试");
@@ -83,10 +62,12 @@ export default function ChatArea({
   }
 
   function selectReply(messageId: string, index: number) {
-    const newMessages = messages.map((message) =>
-      message.id === messageId ? { ...message, selectedReplyIndex: index } : message
-    );
-    updateWorkspace(newMessages);
+    onWorkspaceChange({
+      ...workspace,
+      messages: workspace.messages.map((message) =>
+        message.id === messageId ? { ...message, selectedReplyIndex: index } : message
+      )
+    });
   }
 
   async function handleRegenerate(messageId: string) {
@@ -94,12 +75,14 @@ export default function ChatArea({
     setError("");
     try {
       const replies = await regenerateReplies(messageId);
-      const newMessages = messages.map((message) =>
-        message.id === messageId && message.analysis
-          ? { ...message, analysis: { ...message.analysis, replies }, selectedReplyIndex: null }
-          : message
-      );
-      updateWorkspace(newMessages);
+      onWorkspaceChange({
+        ...workspace,
+        messages: workspace.messages.map((message) =>
+          message.id === messageId && message.analysis
+            ? { ...message, analysis: { ...message.analysis, replies }, selectedReplyIndex: null }
+            : message
+        )
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "换一批失败，请重试");
     } finally {
@@ -110,19 +93,19 @@ export default function ChatArea({
   return (
     <main className="flex min-h-screen flex-1 flex-col bg-paper">
       <div className="flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
-        {messages.length === 0 ? (
+        {workspace.messages.length === 0 ? (
           <div className="grid min-h-[60vh] place-items-center text-center text-sage">
             <p>粘贴对方消息后开始分析</p>
           </div>
         ) : null}
-        {messages.map((message) => (
+        {workspace.messages.map((message, index) => (
           <div key={message.id} className="space-y-3">
             <MessageBubble message={message} />
             {message.analysis ? (
               <AnalysisCard
                 analysis={message.analysis}
                 selectedReplyIndex={message.selectedReplyIndex}
-                defaultOpen={freshlyAnalyzedIds.has(message.id)}
+                defaultOpen={index === workspace.messages.length - 1}
                 regenerating={regeneratingId === message.id}
                 onSelectReply={(replyIndex) => selectReply(message.id, replyIndex)}
                 onRegenerate={() => handleRegenerate(message.id)}
