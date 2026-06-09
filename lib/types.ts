@@ -96,3 +96,11 @@ export interface ExtractFromScreenshotRequest {
 export interface ExtractFromScreenshotResponse {
   messages: Array<Omit<ExtractedMessage, "id">>;
 }
+
+export type AnalysisStreamPhase = "idle" | "reasoning" | "analyzing" | "complete" | "error";
+
+export interface StreamingState {
+  phase: AnalysisStreamPhase;
+  reasoningText: string;
+  error: string | null;
+}

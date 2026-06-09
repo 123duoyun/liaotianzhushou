@@ -112,3 +112,84 @@ export async function callOpenAIJson({
 
   return extractJsonObject(content);
 }
+
+export async function* callOpenAIStream({
+  apiConfig,
+  messages,
+  fetcher = fetch
+}: {
+  apiConfig: ApiConfig;
+  messages: ChatMessage[];
+  fetcher?: Fetcher;
+}): AsyncGenerator<{ reasoning?: string; content?: string }, void, unknown> {
+  if (!apiConfig.apiKey.trim()) {
+    throw new Error("请先在左侧填写 API Key");
+  }
+  if (!apiConfig.baseUrl.trim()) {
+    throw new Error("请先填写 API Base URL");
+  }
+  if (!apiConfig.model.trim()) {
+    throw new Error("请先填写模型名称");
+  }
+
+  const baseUrl = apiConfig.baseUrl.replace(/\/$/, "");
+  const response = await fetcher(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiConfig.apiKey}`
+    },
+    body: JSON.stringify({
+      model: apiConfig.model,
+      temperature: 0.8,
+      stream: true,
+      messages
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI 请求失败：HTTP ${response.status}`);
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data: ")) continue;
+        const data = trimmed.slice(6);
+        if (data === "[DONE]") return;
+
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed?.choices?.[0]?.delta;
+          if (!delta) continue;
+
+          const reasoning = delta.reasoning_content;
+          const content = delta.content;
+
+          if (typeof reasoning === "string" && reasoning) {
+            yield { reasoning };
+          }
+          if (typeof content === "string" && content) {
+            yield { content };
+          }
+        } catch {
+          // skip malformed JSON lines
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
