@@ -1,12 +1,7 @@
 import initSqlJs, { type Database } from "sql.js";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
 import type { Analysis, ApiConfig, AppData, Message, Workspace } from "./types";
-
-// 获取当前模块目录（兼容 ESM）
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "chat.db");
@@ -16,9 +11,13 @@ let _initPromise: Promise<Database> | null = null;
 
 function saveToDisk() {
   if (!_db) return;
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const data = _db.export();
-  fs.writeFileSync(DB_PATH, Buffer.from(data));
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const data = _db.export();
+    fs.writeFileSync(DB_PATH, Buffer.from(data));
+  } catch (error) {
+    console.error("Failed to save database to disk:", error);
+  }
 }
 
 async function getDb(): Promise<Database> {
@@ -26,56 +25,74 @@ async function getDb(): Promise<Database> {
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    const SQL = await initSqlJs({
-      locateFile: (file) => {
-        // 在 Node.js 环境中，直接指向 sql.js 的 dist 目录
-        const sqlJsPath = path.resolve(process.cwd(), "node_modules", "sql.js", "dist", file);
-        if (fs.existsSync(sqlJsPath)) {
-          return sqlJsPath;
+    try {
+      // 设置超时，防止 WASM 加载卡住
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Database initialization timeout (30s)")), 30000);
+      });
+
+      const initPromise = (async () => {
+        const SQL = await initSqlJs({
+          locateFile: (file) => {
+            // 优先使用本地文件
+            const sqlJsPath = path.resolve(process.cwd(), "node_modules", "sql.js", "dist", file);
+            if (fs.existsSync(sqlJsPath)) {
+              return sqlJsPath;
+            }
+            // 备用方案：使用 CDN
+            console.warn(`WASM file not found locally: ${sqlJsPath}, using CDN fallback`);
+            return `https://sql.js.org/dist/${file}`;
+          },
+        });
+
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+
+        if (fs.existsSync(DB_PATH)) {
+          const buf = fs.readFileSync(DB_PATH);
+          _db = new SQL.Database(buf);
+        } else {
+          _db = new SQL.Database();
         }
-        // 备用方案：使用 URL 方式加载
-        return `https://sql.js.org/dist/${file}`;
-      },
-    });
-    fs.mkdirSync(DATA_DIR, { recursive: true });
 
-    if (fs.existsSync(DB_PATH)) {
-      const buf = fs.readFileSync(DB_PATH);
-      _db = new SQL.Database(buf);
-    } else {
-      _db = new SQL.Database();
+        _db.run("PRAGMA foreign_keys = ON");
+        _db.run(`
+          CREATE TABLE IF NOT EXISTS workspaces (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            gender TEXT NOT NULL DEFAULT 'male',
+            relationship TEXT NOT NULL DEFAULT '',
+            goal TEXT NOT NULL DEFAULT ''
+          )
+        `);
+        _db.run(`
+          CREATE TABLE IF NOT EXISTS messages (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            sender TEXT NOT NULL,
+            content TEXT NOT NULL,
+            time TEXT,
+            source TEXT NOT NULL DEFAULT 'manual',
+            analysis TEXT,
+            selected_reply_index INTEGER
+          )
+        `);
+        _db.run(`
+          CREATE TABLE IF NOT EXISTS app_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+          )
+        `);
+        saveToDisk();
+        return _db;
+      })();
+
+      // 使用 Promise.race 实现超时
+      return await Promise.race([initPromise, timeoutPromise]);
+    } catch (error) {
+      console.error("Failed to initialize database:", error);
+      _initPromise = null; // 重置，允许重试
+      throw error;
     }
-
-    _db.run("PRAGMA foreign_keys = ON");
-    _db.run(`
-      CREATE TABLE IF NOT EXISTS workspaces (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        gender TEXT NOT NULL DEFAULT 'male',
-        relationship TEXT NOT NULL DEFAULT '',
-        goal TEXT NOT NULL DEFAULT ''
-      )
-    `);
-    _db.run(`
-      CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-        sender TEXT NOT NULL,
-        content TEXT NOT NULL,
-        time TEXT,
-        source TEXT NOT NULL DEFAULT 'manual',
-        analysis TEXT,
-        selected_reply_index INTEGER
-      )
-    `);
-    _db.run(`
-      CREATE TABLE IF NOT EXISTS app_config (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-    `);
-    saveToDisk();
-    return _db;
   })();
 
   return _initPromise;
