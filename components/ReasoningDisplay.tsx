@@ -15,8 +15,8 @@ export default function ReasoningDisplay({
 }) {
   if (phase === "error" && error) {
     return (
-      <article className="rounded border-l-4 border-coral bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2 text-sm text-coral">
+      <article className="rounded-xl border-l-4 border-red-500 bg-white p-4 shadow-md">
+        <div className="flex items-center gap-2 text-sm text-red-600">
           <span>⚠️</span>
           <span>{error}</span>
         </div>
@@ -28,11 +28,11 @@ export default function ReasoningDisplay({
   const hasContent = contentText.length > 0;
 
   return (
-    <article className="rounded border-l-4 border-coral bg-white p-4 shadow-sm">
+    <article className="rounded-xl border-l-4 border-coral bg-white p-4 shadow-md">
       {hasReasoning ? (
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-            <span className="animate-pulse">🧠</span>
+            <span className={phase === "reasoning" ? "animate-pulse" : ""}>🧠</span>
             <span>{phase === "reasoning" ? "思考中..." : "思考完成"}</span>
           </div>
           <p className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-sm text-ink/70">

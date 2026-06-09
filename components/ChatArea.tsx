@@ -218,7 +218,11 @@ export default function ChatArea({
         ) : null}
         {workspace.messages.length === 0 ? (
           <div className="grid min-h-[60vh] place-items-center text-center text-sage">
-            <p>粘贴对方消息后开始分析</p>
+            <div>
+              <p className="text-4xl">🌿</p>
+              <p className="mt-2 text-sm">粘贴对方消息后开始分析</p>
+              <p className="mt-1 text-xs opacity-70">支持手动输入或截图识别</p>
+            </div>
           </div>
         ) : null}
         {workspace.messages.map((message, index) => (
@@ -245,8 +249,8 @@ export default function ChatArea({
         ))}
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-mist bg-white p-4">
-        {error ? <div role="alert" className="mb-3 rounded bg-coral px-3 py-2 text-sm text-white">{error}</div> : null}
+      <form onSubmit={handleSubmit} className="border-t border-mist bg-white p-4 shadow-lg">
+        {error ? <div role="alert" className="mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">⚠️ {error}</div> : null}
         <div className="mb-3 flex items-center gap-3">
           <ScreenshotUploader disabled={extracting} onImages={handleScreenshots} />
           {extracting ? <span className="text-sm text-sage">识别中</span> : null}
@@ -257,14 +261,14 @@ export default function ChatArea({
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder={apiConfig.apiKey ? "粘贴对方新消息" : "先在左侧填写 API Key，再粘贴消息"}
-            className="min-h-12 flex-1 resize-none rounded border border-mist px-3 py-2"
+            className="min-h-12 flex-1 resize-none rounded-xl border border-mist px-3 py-2 text-ink transition-all duration-200 focus:border-coral focus:ring-2 focus:ring-coral/20"
           />
           <button
             type="submit"
             disabled={loading}
-            className="h-12 rounded bg-coral px-5 font-semibold text-white disabled:opacity-50"
+            className="h-12 rounded-xl bg-coral-dark px-5 font-semibold text-white shadow-green transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
           >
-            {loading ? "分析中" : "分析"}
+            ✨ {loading ? "分析中" : "分析"}
           </button>
         </div>
       </form>

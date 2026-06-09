@@ -17,8 +17,8 @@ body {
 
 body {
   margin: 0;
-  background: #f7f5ef;
-  color: #172026;
+  background: #f0f7f0;
+  color: #1a3a1a;
 }
 
 button,
@@ -26,8 +26,15 @@ input,
 select,
 textarea {
   font: inherit;
+  color: #1a3a1a;
 }
 
 button {
   touch-action: manipulation;
+}
+
+@layer utilities {
+  .shadow-green {
+    box-shadow: 0 4px 14px rgba(34, 197, 94, 0.25);
+  }
 }

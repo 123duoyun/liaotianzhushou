@@ -62,7 +62,7 @@ describe("ChatArea", () => {
     );
 
     await user.type(screen.getByLabelText("输入对方消息"), "周末有空吗，想去看那个展");
-    await user.click(screen.getByRole("button", { name: "分析" }));
+    await user.click(screen.getByRole("button", { name: "✨ 分析" }));
 
     await waitFor(() => expect(analyzeMessage).toHaveBeenCalledWith("周末有空吗，想去看那个展", expect.any(Array)));
     expect(onWorkspaceChange).toHaveBeenCalledWith(expect.objectContaining({
@@ -74,7 +74,7 @@ describe("ChatArea", () => {
       messages: expect.arrayContaining([expect.objectContaining({ selectedReplyIndex: 0 })])
     }));
 
-    await user.click(screen.getByRole("button", { name: "换一批" }));
+    await user.click(screen.getByRole("button", { name: "🔄 换一批" }));
     await waitFor(() => expect(regenerateReplies).toHaveBeenCalled());
     expect(onWorkspaceChange).toHaveBeenCalledWith(expect.objectContaining({
       messages: expect.arrayContaining([expect.objectContaining({
@@ -111,7 +111,7 @@ describe("ChatArea", () => {
     await waitFor(() => expect(extractFromScreenshots).toHaveBeenCalled());
     await user.clear(await screen.findByDisplayValue("在干嘛呀"));
     await user.type(screen.getByLabelText("编辑消息 e1"), "周末有空吗");
-    await user.click(screen.getByRole("button", { name: "确认导入" }));
+    await user.click(screen.getByRole("button", { name: "✅ 确认导入" }));
 
     expect(onWorkspaceChange).toHaveBeenCalledWith(expect.objectContaining({
       messages: [
