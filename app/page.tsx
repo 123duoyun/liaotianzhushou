@@ -240,10 +240,20 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <main className="grid min-h-screen place-items-center bg-paper text-sage">
-        <div className="text-center">
-          <div className="mb-4 text-lg">加载中...</div>
-          <div className="text-sm opacity-70">正在初始化数据库，请稍候</div>
+      <main className="grid min-h-screen place-items-center">
+        <div className="text-center animate-fade-in">
+          <div className="relative mb-6">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-coral/20 to-coral/5 border border-coral-border flex items-center justify-center animate-glow">
+              <span className="text-3xl">🌙</span>
+            </div>
+          </div>
+          <p className="font-display text-lg text-ink tracking-wide">正在唤醒密语...</p>
+          <p className="mt-2 text-sm text-sage">初始化数据中</p>
+          <div className="mt-6 flex justify-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-coral/40 animate-pulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-coral/60 animate-pulse" style={{ animationDelay: "0.2s" }} />
+            <div className="w-1.5 h-1.5 rounded-full bg-coral/40 animate-pulse" style={{ animationDelay: "0.4s" }} />
+          </div>
         </div>
       </main>
     );
@@ -251,15 +261,18 @@ export default function Home() {
 
   if (loadingError) {
     return (
-      <main className="grid min-h-screen place-items-center bg-paper text-sage">
-        <div className="text-center max-w-md p-6">
-          <div className="mb-4 text-lg text-red-600">加载失败</div>
-          <div className="mb-4 text-sm">{loadingError}</div>
+      <main className="grid min-h-screen place-items-center">
+        <div className="text-center max-w-md p-8 glass rounded-3xl animate-fade-in">
+          <div className="w-14 h-14 mx-auto mb-5 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+            <span className="text-2xl">⚠️</span>
+          </div>
+          <p className="font-display text-lg text-ink">连接失败</p>
+          <p className="mt-2 text-sm text-sage leading-relaxed">{loadingError}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="mt-6 px-6 py-2.5 rounded-xl bg-coral text-night-900 font-semibold text-sm transition-all duration-200 hover:bg-coral-light hover:scale-[1.02] active:scale-[0.98]"
           >
-            重试
+            重新连接
           </button>
         </div>
       </main>
@@ -268,12 +281,12 @@ export default function Home() {
 
   if (!data || !activeWorkspace) {
     return (
-      <main className="grid min-h-screen place-items-center bg-paper text-sage">
-        <div className="text-center">
-          <div className="mb-4 text-lg">数据为空</div>
+      <main className="grid min-h-screen place-items-center">
+        <div className="text-center animate-fade-in">
+          <p className="text-sage">数据为空</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="mt-4 px-6 py-2.5 rounded-xl bg-coral text-night-900 font-semibold text-sm transition-all duration-200 hover:bg-coral-light hover:scale-[1.02] active:scale-[0.98]"
           >
             重新加载
           </button>
@@ -283,8 +296,8 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#edf5ed] text-ink md:flex md:h-screen md:overflow-hidden">
-      <h1 className="sr-only">高情商聊天助手</h1>
+    <div className="min-h-screen text-ink md:flex md:h-screen md:overflow-hidden">
+      <h1 className="sr-only">午夜密语 · 高情商聊天助手</h1>
       <WorkspacePanel
         data={data}
         onChange={setData}

@@ -208,14 +208,15 @@ export default function ChatArea({
   }
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col bg-paper">
-      <header className="border-b border-mist bg-white/90 px-4 py-4 backdrop-blur md:px-6">
+    <main className="flex min-h-0 flex-1 flex-col">
+      {/* Header */}
+      <header className="border-b border-white/[0.06] bg-night-800/60 backdrop-blur-xl px-5 py-4 md:px-7">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-sage">聊天工作台</p>
-            <h2 className="mt-1 truncate text-xl font-semibold text-ink md:text-2xl">{workspace.name}</h2>
-            <p className="mt-2 text-sm text-sage">
-              围绕当前关系与目标分析对话，给出更自然的回复建议。
+            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-coral">聊天工作台</p>
+            <h2 className="mt-1.5 truncate font-display text-xl font-bold text-ink md:text-2xl">{workspace.name}</h2>
+            <p className="mt-1.5 text-sm text-sage leading-relaxed">
+              围绕当前关系与目标分析对话，洞察话外之音
             </p>
           </div>
           {onOpenSettings ? (
@@ -223,30 +224,34 @@ export default function ChatArea({
               type="button"
               aria-label="打开设置面板"
               onClick={onOpenSettings}
-              className="inline-flex h-11 shrink-0 items-center rounded-xl border border-mist bg-white px-4 text-sm font-semibold text-ink transition-all duration-200 hover:border-coral-border hover:bg-coral-light md:hidden"
+              className="inline-flex h-10 shrink-0 items-center rounded-xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm font-medium text-ink transition-all duration-200 hover:border-coral-border/40 md:hidden"
             >
               设置
             </button>
           ) : null}
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-mist bg-paper/80 px-4 py-3">
-            <p className="text-xs font-semibold text-sage">当前关系</p>
+        <div className="mt-4 grid gap-2.5 md:grid-cols-3">
+          <div className="rounded-2xl border border-white/[0.04] bg-white/[0.02] px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-sage">当前关系</p>
             <p className="mt-1 text-sm font-semibold text-ink">{workspace.relationship}</p>
           </div>
-          <div className="rounded-2xl border border-mist bg-paper/80 px-4 py-3">
-            <p className="text-xs font-semibold text-sage">当前目标</p>
+          <div className="rounded-2xl border border-white/[0.04] bg-white/[0.02] px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-sage">当前目标</p>
             <p className="mt-1 text-sm font-semibold text-ink">{workspace.goal}</p>
           </div>
-          <div className="rounded-2xl border border-mist bg-paper/80 px-4 py-3">
-            <p className="text-xs font-semibold text-sage">API 状态</p>
-            <p className="mt-1 text-sm font-semibold text-ink">{apiConfig.apiKey ? "已配置，可直接分析" : "未配置，请先补充 Key"}</p>
+          <div className="rounded-2xl border border-white/[0.04] bg-white/[0.02] px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-sage">API 状态</p>
+            <p className="mt-1 text-sm font-semibold flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${apiConfig.apiKey ? "bg-emerald-400" : "bg-red-400"}`} />
+              <span className="text-ink">{apiConfig.apiKey ? "已连接" : "未配置"}</span>
+            </p>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 space-y-5 overflow-y-auto px-4 py-5 md:px-6 md:py-6">
+      {/* Message area */}
+      <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 md:px-7 md:py-6">
         {draftExtractedMessages.length > 0 ? (
           <ExtractedMessages
             messages={draftExtractedMessages}
@@ -256,16 +261,18 @@ export default function ChatArea({
           />
         ) : null}
         {workspace.messages.length === 0 ? (
-          <div className="grid min-h-[42vh] place-items-center rounded-[28px] border border-dashed border-coral-border bg-white/60 px-6 text-center text-sage">
-            <div className="max-w-md">
-              <p className="text-5xl">🌿</p>
-              <p className="mt-4 text-base font-semibold text-ink">粘贴对方消息后开始分析</p>
-              <p className="mt-2 text-sm opacity-80">支持手动输入或截图识别，分析会结合当前关系和目标给出回复建议。</p>
+          <div className="grid min-h-[42vh] place-items-center rounded-3xl border border-dashed border-white/[0.08] bg-white/[0.02] px-6 text-center">
+            <div className="max-w-md animate-fade-in">
+              <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-coral/10 to-coral/5 border border-coral-border/20 flex items-center justify-center">
+                <span className="text-3xl">🌙</span>
+              </div>
+              <p className="font-display text-lg font-semibold text-ink">粘贴对方消息后开始分析</p>
+              <p className="mt-2 text-sm text-sage leading-relaxed">支持手动输入或截图识别，分析会结合当前关系和目标给出回复建议。</p>
             </div>
           </div>
         ) : null}
         {workspace.messages.map((message, index) => (
-          <div key={message.id} className="space-y-3">
+          <div key={message.id} className="space-y-3 animate-slide-up" style={{ animationDelay: `${Math.min(index * 0.05, 0.3)}s` }}>
             <MessageBubble message={message} />
             {streamingStates.has(message.id) ? (
               <ReasoningDisplay
@@ -288,27 +295,42 @@ export default function ChatArea({
         ))}
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-mist bg-white p-4 shadow-[0_-12px_32px_rgba(26,58,26,0.08)] md:p-5">
-        {error ? <div role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">⚠️ {error}</div> : null}
-        <div className="rounded-[24px] border border-mist bg-paper/70 p-3 md:p-4">
+      {/* Input form */}
+      <form onSubmit={handleSubmit} className="border-t border-white/[0.06] bg-night-800/80 backdrop-blur-xl p-4 md:p-5">
+        {error ? (
+          <div role="alert" className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm text-red-400 flex items-center gap-2">
+            <span>⚠</span>
+            <span>{error}</span>
+          </div>
+        ) : null}
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 md:p-4">
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <ScreenshotUploader disabled={extracting} onImages={handleScreenshots} />
-            <span className="text-sm text-sage">{extracting ? "识别中" : "支持直接粘贴截图到输入区"}</span>
+            <span className="text-xs text-sage">{extracting ? "识别中..." : "支持直接粘贴截图"}</span>
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <textarea
               aria-label="输入对方消息"
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder={apiConfig.apiKey ? "粘贴对方新消息，或补充一点你想达到的效果" : "先在设置里填写 API Key，再粘贴消息"}
-              className="min-h-[96px] flex-1 resize-none rounded-2xl border border-mist bg-white px-4 py-3 text-ink transition-all duration-200 focus:border-coral focus:ring-2 focus:ring-coral/20"
+              placeholder={apiConfig.apiKey ? "粘贴对方新消息，或补充一点你想达到的效果..." : "先在设置里填写 API Key，再粘贴消息"}
+              className="min-h-[88px] flex-1 resize-none rounded-xl border border-white/[0.06] bg-white/[0.04] px-4 py-3 text-sm text-ink transition-all duration-200 focus:border-coral/40 focus:ring-1 focus:ring-coral/15 placeholder:text-sage/40"
             />
             <button
               type="submit"
               disabled={loading}
-              className="h-12 rounded-2xl bg-coral-dark px-6 font-semibold text-white shadow-green transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              className="h-11 rounded-xl bg-gradient-to-r from-coral to-coral-dark px-6 font-semibold text-night-900 text-sm shadow-amber transition-all duration-200 hover:shadow-amber-lg hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:hover:scale-100"
             >
-              ✨ {loading ? "分析中" : "分析"}
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-night-900/30 border-t-night-900 rounded-full animate-spin" />
+                  分析中
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  ✦ 分析
+                </span>
+              )}
             </button>
           </div>
         </div>

@@ -44,8 +44,11 @@ export default function ScreenshotUploader({
   }, [disabled, onImages]);
 
   return (
-    <label className="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl border border-sage bg-paper px-4 text-sm font-semibold text-ink transition-all duration-200 hover:bg-coral-light">
-      📷 上传截图
+    <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 text-xs font-semibold text-sage transition-all duration-200 hover:border-coral/30 hover:text-coral">
+      <span className="flex items-center gap-1.5">
+        <span className="text-sm">📷</span>
+        上传截图
+      </span>
       <input
         ref={inputRef}
         aria-label="上传截图"
